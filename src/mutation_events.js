@@ -38,7 +38,6 @@
       let mutationEventType;
       const is_parent_mutation = target === actualTarget.originalParent;
       console.log(mutation);
-      console.log('mutation type ', type, ', target: ', target,', parent mutation: ', is_parent_mutation, ', direct target: ',actualTarget===target);
       const is_contained = actualTarget === target || actualTarget.contains(target);
 
       if (type === "childList") {
