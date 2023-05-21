@@ -7,10 +7,23 @@
 (function() {
   // Check if Mutation Events are supported by the browser
   if ("MutationEvent" in window) {
-    window.enableMutationEventPolyfill = () => {};
-    window.disableMutationEventPolyfill = () => {};
+    window.disableMutationEventPolyfillForTesting = () => {};
     return;
   }
+  // Only run once
+  if (window.mutationEventsPolyfillInstalled) {
+    return;
+  }
+  window.mutationEventsPolyfillInstalled = true;
+
+  const mutationEvents = [
+    'DOMCharacterDataModified',
+    'DOMNodeInserted',
+    'DOMNodeInsertedIntoDocument',
+    'DOMNodeRemoved',
+    'DOMNodeRemovedFromDocument',
+    'DOMSubtreeModified',
+  ];
 
   function dispatchMutationEvent(type, target, options, fakeTarget) {
     const event = new Event(type,options);
@@ -35,8 +48,6 @@
       };
 
       // Set options based on mutation type
-      let mutationEventType;
-      const is_parent_mutation = target === actualTarget.originalParent;
       console.log(mutation);
       const is_contained = actualTarget === target || actualTarget.contains(target);
 
@@ -104,12 +115,12 @@
 
   // Create a function to start observing mutations
   function enableMutationEventPolyfill(target) {
-    if (observedTargetsToObservers.has(target))
+    if (observedTargetsToObservers.has(target)) {
+      observedTargetsToObservers.get(target).count++;
       return;
-    // Find a better way to store this, rather than on the target
-    target.originalParent = target.parentNode;
+    }
     const observer = new MutationObserver(handleMutations.bind(null,target));
-    observedTargetsToObservers.set(target, observer);
+    observedTargetsToObservers.set(target, {observer,count: 1});
     observer.observe(target.parentNode || target, observerOptions);
   }
 
@@ -117,13 +128,38 @@
   function disableMutationEventPolyfill(target) {
     if (!observedTargetsToObservers.has(target))
       return;
-    const observer = observedTargetsToObservers.get(target);
-    observedTargetsToObservers.delete(target);
-    observer.disconnect();
+    if (--observedTargetsToObservers.get(target).count === 0) {
+      const observer = observedTargetsToObservers.get(target).observer;
+      observedTargetsToObservers.delete(target);
+      observer.disconnect();
+    }
   }
 
-  // Assign the polyfill functions to the global scope
-  window.enableMutationEventPolyfill = enableMutationEventPolyfill;
-  window.disableMutationEventPolyfill = disableMutationEventPolyfill;
+  // Monkeypatch addEventListener/removeEventListener
+  const originalAddEventListener = Element.prototype.addEventListener;
+  Element.prototype.addEventListener = function(eventName, listener, options) {
+    console.log(`addEventListener for ${eventName}`);
+    if (mutationEvents.includes(eventName)) {
+      console.log(`Polyfilled ${eventName} listener on ${this}!`);
+      enableMutationEventPolyfill(this);
+    }
+    originalAddEventListener.apply(this, arguments);
+  };
+  const originalRemoveEventListener = window.removeEventListener;
+  window.removeEventListener = function(eventName, listener, options) {
+    if (mutationEvents.includes(eventName)) {
+      disableMutationEventPolyfill(target);
+    }
+    originalRemoveEventListener.apply(window, arguments);
+  };
+
+  // This removes the observers without requiring a call to removeEventListener,
+  // to make sure no more events are fired.
+  window.disableMutationEventPolyfillForTesting = (target) => {
+    while (observedTargetsToObservers.has(target)) {
+      disableMutationEventPolyfill(target);
+    }
+  }
+
   console.log('Installed Mutation Events polyfill');
 })();
