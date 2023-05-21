@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+
+<script src="../src/mutation_events.js"></script>
+
+
+<div id="parent">
+  <div id=target>Hello</div>
+  <div id=other></div>
+</div>
+
+
+<script>
+
+// Test for mutation events, with and without polyfill
+
+const nativelySupported = "MutationEvent" in window;
+function getDescription(n) {
+  if (n.nodeType === 3) {
+    return `Text node "${n.textContent}"`;
+  } else if (n.hasAttribute('id')) {
+    return n.id;
+  } else {
+    return n.outerHTML;
+  }
+}
+function assert(val,msg) {
+  if (!val) {
+    console.log('   ');
+    console.log('   ');
+    console.log('=====> FAIL! ',msg);
+    console.log('   ');
+    console.log('   ');
+    document.body.appendChild(document.createTextNode('FAILURE!'));
+  }
+  return val;
+}
+function assert_array_equals(actual,expected,description) {
+  description = description || ' ';
+  const diffStr = `${description} actual [${actual.join(',')}] expected [${expected.join(',')}]`;
+  if (!assert(typeof actual === "object" && actual !== null && "length" in actual,`Actual not an array. ${diffStr}`)) return;
+  if (!assert(actual.length === expected.length, `Incorrect length. ${diffStr}`)) return;
+  for (var i = 0; i < actual.length; i++) {
+    if (!assert(actual.hasOwnProperty(i) === expected.hasOwnProperty(i), description)) return;
+    if (!assert(expected[i] === actual[i],`Value ${i} mismatch. ${diffStr}`)) return;
+  }
+}
+
+const target = document.getElementById('target');
+const parent = document.getElementById('parent');
+enableMutationEventPolyfill(target);
+enableMutationEventPolyfill(target); // Calling twice shouldn't hurt
+const events = [
+  'DOMCharacterDataModified',
+  'DOMNodeInserted',
+  'DOMNodeInsertedIntoDocument',
+  'DOMNodeRemoved',
+  'DOMNodeRemovedFromDocument',
+  'DOMSubtreeModified',
+];
+async function checkAll() {
+  let eventLog = [];
+  let expectAllEmpty = false;
+  let expectTrustedEvents = nativelySupported;
+  events.forEach(evt => {
+    target.addEventListener(evt,(e) => {
+      const description = `${e.type} on ${getDescription(e.target)}`;
+      assert(e.isTrusted === expectTrustedEvents,'trusted event mismatch: ' + e.isTrusted)
+      console.log(description);
+      eventLog.push(description)
+    })
+  });
+  async function waitFrame() {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  async function waitAndCheck(expected) {
+    await waitFrame();
+    assert_array_equals(eventLog,expectAllEmpty ? [] : expected);
+    eventLog = [];
+  }
+
+  for(let iter=0; iter<2; ++iter) {
+    console.log(`--> (iter ${iter}) Remove target`);
+    target.remove();
+    await waitAndCheck(['DOMNodeRemoved on target', 'DOMNodeRemovedFromDocument on target']);
+
+    console.log(`--> (iter ${iter}) Move target`);
+    other.appendChild(target);
+    await waitAndCheck(['DOMNodeInserted on target', 'DOMNodeInsertedIntoDocument on target']);
+
+    console.log(`--> (iter ${iter}) Create attribute`);
+    target.setAttribute('test','foo');
+    await waitAndCheck(['DOMSubtreeModified on target']);
+
+    console.log(`--> (iter ${iter}) Change value of attribute`);
+    target.setAttribute('test','bar');
+    await waitAndCheck([]);
+
+    console.log(`--> (iter ${iter}) Change attribute value directly`);
+    target.attributes[1].value = 'bar';
+    await waitAndCheck([]);
+
+    console.log(`--> (iter ${iter}) Remove attribute`);
+    target.removeAttribute('test');
+    await waitAndCheck(['DOMSubtreeModified on target']);
+
+    console.log(`--> (iter ${iter}) Set target's contained node`);
+    target.replaceChildren(document.createTextNode("Hello there"));
+    await waitAndCheck(['DOMNodeRemoved on Text node "Hello"', 'DOMSubtreeModified on target',
+        'DOMNodeInserted on Text node "Hello there"', 'DOMSubtreeModified on target']);
+
+    console.log(`--> (iter ${iter}) Set text node content`);
+    target.firstChild.textContent = "foo";
+    await waitAndCheck(['DOMCharacterDataModified on Text node "foo"','DOMSubtreeModified on Text node "foo"']);
+
+    console.log(`--> (iter ${iter}) Append node`);
+    const div = document.createElement('div');
+    div.id = 'div';
+    target.appendChild(div);
+    await waitAndCheck(['DOMNodeInserted on div','DOMSubtreeModified on target']);
+
+    console.log(`--> (iter ${iter}) Set child node attributes`);
+    div.setAttribute('foo','bar');
+    await waitAndCheck(['DOMSubtreeModified on div']);
+
+    // Cleanup
+    parent.appendChild(target);
+    target.removeAttribute('test');
+    target.replaceChildren(document.createTextNode('Hello'));
+    assert(target.parentNode === parent,'target wasn\'t put back after tests');
+    assert(target.outerHTML === '<div id="target">Hello</div>','target has extra attributes: ' + target.outerHTML);
+    eventLog = [];
+
+    if (iter==0) {
+      // Now disable and check that the correct thing happens
+      disableMutationEventPolyfill(target);
+      // If mutation events are natively supported, expect the same events.
+      // If not, expect no events after the polyfill is disabled.
+      if (!nativelySupported) {
+        console.log('Mutation Events NATIVELY DISABLED - verifying no events');
+        expectAllEmpty = true;
+      } else {
+        console.log('Mutation Events NATIVELY ENABLED - verifying the same events are fired');
+        assert(expectTrustedEvents,'problem');
+      }
+    }
+  }
+}
+checkAll();
+
+</script>
