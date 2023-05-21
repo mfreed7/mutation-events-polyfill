@@ -36,7 +36,9 @@
 <script>
 const nativelySupported = "MutationEvent" in window;
 function getDescription(n) {
-  if (n.nodeType === 3) {
+  if (typeof n !== 'object' || n === null) {
+    return String(n);
+  } else if (n.nodeType === 3) {
     return `Text node ${n.textContent}`;
   } else if (n.hasAttribute('id')) {
     return n.id;
@@ -48,6 +50,12 @@ function addResult(success,msg) {
   const newRow = document.createElement('tr');
   newRow.innerHTML = `<td class=${success ? 'pass' : 'fail'}>${success ? 'PASS' : 'FAIL'}</td><td>${msg}</td>`;
   document.getElementById('log').appendChild(newRow);
+}
+function mutationEventToString(e) {
+  return `${e.type}, target: ${getDescription(e.target)}, attrChange: ${e.attrChange}, ` +
+      `bubbles: ${e.bubbles}, cancelable: ${e.cancelable}, ` +
+      `currentTarget: ${getDescription(e.currentTarget)}, eventPhase: ${e.eventPhase}, ` +
+      `newValue: "${e.newValue}", prevValue: "${e.prevValue}", relatedNode: ${getDescription(e.relatedNode)}`;
 }
 function assert(val,msg) {
   if (!val) {
@@ -103,10 +111,9 @@ async function testHarness() {
 
   events.forEach(evt => {
     target.addEventListener(evt,(e) => {
-      const description = `${e.type} on ${getDescription(e.target)}`;
       assert(e.isTrusted === expectTrustedEvents,'trusted event mismatch: ' + e.isTrusted)
-      console.log('Received ' + description);
-      eventLog.push(description)
+      console.log(`Received ${e.type} on ${getDescription(e.target)}`);
+      eventLog.push(mutationEventToString(e))
     })
   });
 
@@ -144,16 +151,36 @@ async function testHarness() {
   parent.remove();
 }
 
-
+const baseEventObj = {
+  attrChange: 0, bubbles: true, cancelable: false, eventPhase: 2, newValue: '', prevValue: '', relatedNode: null
+}
+function eventObj(type, target, overrides) {
+  let newEvent = Object.assign({}, baseEventObj);
+  newEvent.type = type;
+  newEvent.target = target;
+  newEvent.currentTarget = target;
+  if (overrides) {
+    newEvent = Object.assign(newEvent,overrides);
+  }
+  return mutationEventToString(newEvent);
+}
 
 async function runAllTests(state) {
-  await testOne(state,'Node removal',['DOMNodeRemoved on target', 'DOMNodeRemovedFromDocument on target'],
+  await testOne(state,'Node removal',[
+      eventObj('DOMNodeRemoved','target',{relatedNode: parent}),
+      eventObj('DOMNodeRemovedFromDocument','target',{bubbles:false})
+    ],
     () => target.remove());
 
-  await testOne(state,'Node append',['DOMNodeInserted on target', 'DOMNodeInsertedIntoDocument on target'],
+  await testOne(state,'Node append',[
+      eventObj('DOMNodeInserted','target',{relatedNode: other}),
+      eventObj('DOMNodeInsertedIntoDocument','target',{bubbles:false})
+    ],
     () => other.appendChild(target));
 
-  await testOne(state,'Create attribute',['DOMSubtreeModified on target'],
+  await testOne(state,'Create attribute',[
+      eventObj('DOMSubtreeModified','target'),
+    ],
     () => target.setAttribute('test','foo'));
 
   await testOne(state,'Change attribute value',[],
@@ -162,23 +189,38 @@ async function runAllTests(state) {
   await testOne(state, 'Change attribute value (direct)',[],
     () => {target.attributes[1].value = 'bar'});
 
-  await testOne(state,'Remove attribute',['DOMSubtreeModified on target'],
+  await testOne(state,'Remove attribute',[
+      eventObj('DOMSubtreeModified','target'),
+    ],
     () => target.removeAttribute('test'));
 
-  await testOne(state,'Replace children',['DOMNodeRemoved on Text node Hello','DOMSubtreeModified on target','DOMNodeInserted on Text node Hello there','DOMSubtreeModified on target'],
+  await testOne(state,'Replace children',[
+      eventObj('DOMNodeRemoved','Text node Hello',{relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMSubtreeModified','target'),
+      eventObj('DOMNodeInserted','Text node Hello there',{relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMSubtreeModified','target'),
+    ],
     () => target.replaceChildren(document.createTextNode('Hello there')));
 
-  await testOne(state, 'Replace text content',['DOMCharacterDataModified on Text node foo','DOMSubtreeModified on Text node foo'],
+  await testOne(state, 'Replace text content',[
+      eventObj('DOMCharacterDataModified','Text node foo',{currentTarget: target, eventPhase: 3, newValue: 'foo', prevValue: 'Hello there'}),
+      eventObj('DOMSubtreeModified','Text node foo',{currentTarget: target, eventPhase: 3}),
+    ],
     () => target.firstChild.textContent = "foo");
 
-  await testOne(state, 'Append child node',['DOMNodeInserted on div','DOMSubtreeModified on target'],
+  await testOne(state, 'Append child node',[
+      eventObj('DOMNodeInserted','div', {relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMSubtreeModified','target'),
+    ],
     () => {
       const div = document.createElement('div');
       div.id = 'div';
       target.appendChild(div);
     });
 
-  await testOne(state, 'Create child node attribute',['DOMSubtreeModified on div'],
+  await testOne(state, 'Create child node attribute',[
+      eventObj('DOMSubtreeModified','div',{currentTarget: target, eventPhase: 3}),
+    ],
     () => div.setAttribute('foo','bar'));
 }
 

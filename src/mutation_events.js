@@ -138,9 +138,7 @@
   // Monkeypatch addEventListener/removeEventListener
   const originalAddEventListener = Element.prototype.addEventListener;
   Element.prototype.addEventListener = function(eventName, listener, options) {
-    console.log(`addEventListener for ${eventName}`);
     if (mutationEvents.includes(eventName)) {
-      console.log(`Polyfilled ${eventName} listener on ${this}!`);
       enableMutationEventPolyfill(this);
     }
     originalAddEventListener.apply(this, arguments);
