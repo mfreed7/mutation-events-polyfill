@@ -51,15 +51,19 @@ function addResult(success,msg) {
   newRow.innerHTML = `<td class=${success ? 'pass' : 'fail'}>${success ? 'PASS' : 'FAIL'}</td><td>${msg}</td>`;
   document.getElementById('log').appendChild(newRow);
 }
-function mutationEventToString(e) {
-  return `${e.type}, target: ${getDescription(e.target)}, attrChange: ${e.attrChange}, ` +
-      `bubbles: ${e.bubbles}, cancelable: ${e.cancelable}, ` +
-      `currentTarget: ${getDescription(e.currentTarget)}, eventPhase: ${e.eventPhase}, ` +
-      `newValue: "${e.newValue}", prevValue: "${e.prevValue}"` +
-      /* Things we can't do with the polyfill: */
-     // `, relatedNode: ${getDescription(e.relatedNode)}`;
-     '';
-}
+const eventProperties = [
+  'type',
+  'target',
+  'currentTarget',
+  'bubbles',
+  'cancelable',
+  'eventPhase',
+  'attrChange',
+  'newValue',
+  'prevValue',
+  /* Things we can't do with the polyfill: */
+  // 'relatedNode',
+]
 function assert(val,msg) {
   if (!val) {
     console.log('=====> FAIL! ',msg);
@@ -67,11 +71,24 @@ function assert(val,msg) {
   }
   return val;
 }
-function assert_equals(actual,expected,description) {
-  actual = JSON.stringify(actual);
-  expected = JSON.stringify(expected);
-  const diffStr = `${description}. Actual = ${actual}, expected = ${expected}`;
-  return assert(actual === expected,diffStr)
+function assert_events_equal(actualEvents,expectedEvents,description) {
+  if (!assert(Array.isArray(actualEvents) && Array.isArray(expectedEvents),`${description}: Both must be arrays`))
+    return false;
+  if (!assert(actualEvents.length === expectedEvents.length,`${description}: Different number of events received. ${actualEvents.length} vs ${expectedEvents.length}`))
+    return false;
+  for(let i=0;i<actualEvents.length;++i) {
+    let pass=true;
+    for(let property of eventProperties) {
+      pass = assert(property in actualEvents[i],`${description}: event #${i} actual should have property ${property}`) && pass;
+      pass = assert(property in expectedEvents[i],`${description}: event #${i} expected should have property ${property}`) && pass;
+      const actual = getDescription(actualEvents[i][property]);
+      const expected = getDescription(expectedEvents[i][property]);
+      pass = assert(actual === expected,`${description}: event #${i} mismatch for ${property}, actual ${actual} vs. expected ${expected}`) && pass;
+    };
+    if (!pass)
+      return false;
+  }
+  return true;
 }
 
 const target = document.getElementById('target');
@@ -95,7 +112,7 @@ async function waitFrame() {
 }
 async function waitAndCheck(expected, description) {
   await waitFrame();
-  const success = assert_equals(eventLog,expectAllEmpty ? [] : expected,description);
+  const success = assert_events_equal(eventLog,expectAllEmpty ? [] : expected,description);
   eventLog = [];
   return success;
 }
@@ -116,7 +133,11 @@ async function testHarness() {
     target.addEventListener(evt,(e) => {
       assert(e.isTrusted === expectTrustedEvents,'trusted event mismatch: ' + e.isTrusted)
       console.log(`Received ${e.type} on ${getDescription(e.target)}`);
-      eventLog.push(mutationEventToString(e))
+      let eventCopy = {};
+      for (property of eventProperties) {
+        eventCopy[property] = e[property];
+      }
+      eventLog.push(eventCopy);
     })
   });
 
@@ -162,10 +183,10 @@ function eventObj(type, target, overrides) {
   newEvent.type = type;
   newEvent.target = target;
   newEvent.currentTarget = target;
-  if (overrides) {
-    newEvent = Object.assign(newEvent,overrides);
+  for(prop in overrides) {
+    newEvent[prop] = overrides[prop];
   }
-  return mutationEventToString(newEvent);
+  return newEvent;
 }
 
 async function runAllTests(state) {
