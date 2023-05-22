@@ -25,8 +25,19 @@
     'DOMSubtreeModified',
   ];
 
+  const baseEventObj = {
+    attrChange: 0, bubbles: true, cancelable: false, eventPhase: 2, newValue: '', prevValue: '', relatedNode: null
+  }
   function dispatchMutationEvent(type, target, options, fakeTarget) {
-    const event = new Event(type,options);
+    let newEvent = Object.assign({}, baseEventObj);
+    if (options) {
+      newEvent = Object.assign(newEvent, options);
+    }
+    const event = new Event(type,newEvent);
+    event.attrChange = newEvent.attrChange;
+    event.newValue = newEvent.newValue;
+    event.prevValue = newEvent.prevValue;
+    event.relatedNode = newEvent.relatedNode;
     if (fakeTarget) {
       Object.defineProperty(event, 'target', {writable: false, value: fakeTarget});
     }
@@ -37,15 +48,6 @@
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-      let options = {
-        bubbles: true,
-        cancelable: true,
-        relatedNode: null,
-        prevValue: null,
-        newValue: null,
-        attributeName: null,
-        attrChange: null,
-      };
 
       // Set options based on mutation type
       console.log(mutation);
@@ -56,52 +58,49 @@
         mutation.removedNodes.forEach(n => {
           if (n === actualTarget || target === actualTarget) {
             firedRemoved = true;
-            dispatchMutationEvent('DOMNodeRemoved', n, options);
+            dispatchMutationEvent('DOMNodeRemoved', n);
             if (target === actualTarget) {
               // The actual DOMNodeRemoved event is fired *before* the node is
               // removed, which means it bubbles up to old parents. However,
               // Mutation Observer fires after the fact. So we need to fire a
               // DOMNodeRemoved on the disconnected node, *plus* fire a fake
               // one at actualTarget with a "fake" target of the removed node.
-              dispatchMutationEvent('DOMNodeRemoved', actualTarget, options, n);
+              dispatchMutationEvent('DOMNodeRemoved', actualTarget, undefined, n);
             }
             // This should be conditional on being in the document before!
             if (n === actualTarget && !actualTarget.isConnected) {
-              dispatchMutationEvent('DOMNodeRemovedFromDocument', actualTarget, options);
+              dispatchMutationEvent('DOMNodeRemovedFromDocument', actualTarget, {bubbles: false});
             }
           }
         });
         if (firedRemoved && actualTarget===target) {
-          options.relatedNode = target; // FIX ME! options should be a function that sets defaults and takes overrides
-          dispatchMutationEvent('DOMSubtreeModified', actualTarget, options);
+          dispatchMutationEvent('DOMSubtreeModified', actualTarget, {relatedNode: target});
         }
         let firedInserted = false;
         mutation.addedNodes.forEach(n => {
           if (n === actualTarget || target === actualTarget) {
             firedInserted = true;
-            dispatchMutationEvent('DOMNodeInserted', n, options);
+            dispatchMutationEvent('DOMNodeInserted', n);
             // This should be conditional on not being in the document before!
             if (n === actualTarget && actualTarget.isConnected) {
-              dispatchMutationEvent('DOMNodeInsertedIntoDocument', actualTarget, options);
+              dispatchMutationEvent('DOMNodeInsertedIntoDocument', actualTarget, {bubbles: false});
             }
           }
         });
         if (firedInserted && actualTarget===target) {
-          options.relatedNode = target; // FIX ME! options should be a function that sets defaults and takes overrides
-          dispatchMutationEvent('DOMSubtreeModified', actualTarget, options);
+          dispatchMutationEvent('DOMSubtreeModified', actualTarget, {relatedNode: target});
         }
       } else if (type === "attributes" && is_contained) {
         // Attribute changes only fire DOMSubtreeModified, and only if the attribute
         // is being added or removed, and not just changed.
-        options.attributeName = mutation.attributeName;
-        options.prevValue = mutation.oldValue;
-        options.newValue = target.getAttribute(mutation.attributeName);
-        if (options.prevValue === null || options.newValue === null) {
-          dispatchMutationEvent('DOMSubtreeModified', target, options);
+        if (mutation.oldValue === null || target.getAttribute(mutation.attributeName) === null) {
+          dispatchMutationEvent('DOMSubtreeModified', target, {attributeName: mutation.attributeName});
         }
       } else if (type === "characterData" && is_contained) {
-        options.prevValue = mutation.oldValue;
-        options.newValue = target.textContent;
+        const options = {
+          prevValue: mutation.oldValue,
+          newValue: target.textContent,
+        };
         dispatchMutationEvent('DOMCharacterDataModified', target, options);
         if (actualTarget !== target) {
           dispatchMutationEvent('DOMSubtreeModified', target, options);

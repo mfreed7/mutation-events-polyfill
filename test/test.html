@@ -55,7 +55,10 @@ function mutationEventToString(e) {
   return `${e.type}, target: ${getDescription(e.target)}, attrChange: ${e.attrChange}, ` +
       `bubbles: ${e.bubbles}, cancelable: ${e.cancelable}, ` +
       `currentTarget: ${getDescription(e.currentTarget)}, eventPhase: ${e.eventPhase}, ` +
-      `newValue: "${e.newValue}", prevValue: "${e.prevValue}", relatedNode: ${getDescription(e.relatedNode)}`;
+      `newValue: "${e.newValue}", prevValue: "${e.prevValue}"` +
+      /* Things we can't do with the polyfill: */
+     // `, relatedNode: ${getDescription(e.relatedNode)}`;
+     '';
 }
 function assert(val,msg) {
   if (!val) {
