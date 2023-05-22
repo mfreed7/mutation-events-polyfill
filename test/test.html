@@ -55,10 +55,10 @@ const eventProperties = [
   'type',
   'target',
   'isTrusted',
+  'capture',
   'currentTarget',
   'bubbles',
   'cancelable',
-  'eventPhase',
   'attrChange',
   'newValue',
   'prevValue',
@@ -75,10 +75,9 @@ function assert(val,msg) {
 function assert_events_equal(actualEvents,expectedEvents,description) {
   if (!assert(Array.isArray(actualEvents) && Array.isArray(expectedEvents),`${description}: Both must be arrays`))
     return false;
-  if (!assert(actualEvents.length === expectedEvents.length,`${description}: Different number of events received. ${actualEvents.length} vs ${expectedEvents.length}`))
-    return false;
-  for(let i=0;i<actualEvents.length;++i) {
-    let pass=true;
+  let pass = assert(actualEvents.length === expectedEvents.length,`${description}: Different number of events received. actual ${actualEvents.length} vs expected ${expectedEvents.length}`);
+  const len = Math.min(actualEvents.length,expectedEvents.length);
+  for(let i=0;i<len;++i) {
     for(let property of eventProperties) {
       let eventDescription = `event #${i}`;
       if (property !== 'type') {
@@ -107,6 +106,7 @@ const events = [
   'DOMNodeRemovedFromDocument',
   'DOMSubtreeModified',
 ];
+const testInsertedRemovedDocument = false; // Set to false to ignore these events
 
 let eventLog = [];
 let expectAllEmpty = false;
@@ -117,13 +117,23 @@ async function waitFrame() {
 }
 async function waitAndCheck(expected, description) {
   await waitFrame();
+  if (!testInsertedRemovedDocument) {
+    const filter = e => (e.type !== 'DOMNodeInsertedIntoDocument' && e.type !== 'DOMNodeRemovedFromDocument');
+    eventLog = eventLog.filter(filter);
+    expected = expected.filter(filter);
+  }
   const success = assert_events_equal(eventLog,expectAllEmpty ? [] : expected,description);
   eventLog = [];
   return success;
 }
-async function testOne(state, description, expectedEvents, action) {
+async function testOne(state, description, eventsList, expectedEventOrder, action) {
   description = `(${state}) ${description}`;
   console.log(`--> ${description}`);
+  let expectedEvents = [];
+  for(let eventItem of expectedEventOrder) {
+    const event = Object.assign({},eventsList[eventItem[0]]);
+    expectedEvents.push(Object.assign(event,{currentTarget: eventItem[1], capture: eventItem[2]==='capture'}));
+  }
   await action();
   const success = await waitAndCheck(expectedEvents, description);
   if (success) {
@@ -135,14 +145,21 @@ async function testHarness() {
   // Test for mutation events, with and without polyfill
 
   events.forEach(evt => {
-    target.addEventListener(evt,(e) => {
-      console.log(`Received ${e.type} on ${getDescription(e.target)}`);
-      let eventCopy = {};
-      for (property of eventProperties) {
-        eventCopy[property] = e[property];
+    function listener(capture) {
+      return (e) => {
+        console.log(`Received ${e.type} (${capture ? 'capture' : 'bubble'}) on ${getDescription(e.currentTarget)}, target is ${getDescription(e.target)}`);
+        let eventCopy = {};
+        for (property of eventProperties) {
+          eventCopy[property] = e[property];
+        }
+        eventCopy.capture = capture;
+        eventLog.push(eventCopy);
       }
-      eventLog.push(eventCopy);
-    })
+    }
+    target.addEventListener(evt,listener(false),{capture: false});
+    target.addEventListener(evt,listener(true),{capture: true});
+    parent.addEventListener(evt,listener(false),{capture: false});
+    parent.addEventListener(evt,listener(true),{capture: true});
   });
 
   let left=2;
@@ -162,6 +179,7 @@ async function testHarness() {
     if (left) {
       // Now disable and check that the correct thing happens
       disableMutationEventPolyfillForTesting(target);
+      disableMutationEventPolyfillForTesting(parent);
       // If mutation events are natively supported, expect the same events.
       // If not, expect no events after the polyfill is disabled.
       if (!nativelySupported) {
@@ -180,13 +198,12 @@ async function testHarness() {
 }
 
 const baseEventObj = {
-  attrChange: 0, bubbles: true, cancelable: false, eventPhase: 2, newValue: '', prevValue: '', relatedNode: null
+  attrChange: 0, bubbles: true, cancelable: false, newValue: '', prevValue: '', relatedNode: null
 }
 function eventObj(type, target, overrides) {
   let newEvent = Object.assign({}, baseEventObj);
   newEvent.type = type;
   newEvent.target = target;
-  newEvent.currentTarget = target;
   newEvent.isTrusted = expectTrustedEvents;
   for(prop in overrides) {
     newEvent[prop] = overrides[prop];
@@ -197,49 +214,131 @@ function eventObj(type, target, overrides) {
 async function runAllTests(state) {
   await testOne(state,'Node removal',[
       eventObj('DOMNodeRemoved','target',{relatedNode: parent}),
-      eventObj('DOMNodeRemovedFromDocument','target',{bubbles:false})
+      eventObj('DOMNodeRemovedFromDocument','target',{bubbles:false}),
+      eventObj('DOMNodeRemovedFromDocument','Text node Hello',{bubbles:false}),
+      eventObj('DOMSubtreeModified','parent'),
+    ],[
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
+      [1, 'parent', 'capture'],
+      [1, 'target', 'capture'],
+      [1, 'target'], // DOMNodeRemovedFromDocument doesn't bubble
+      [2, 'parent', 'capture'],
+      [2, 'target', 'capture'],
+      [3, 'parent', 'capture'],
+      [3, 'parent'],
     ],
     () => target.remove());
 
   await testOne(state,'Node append',[
       eventObj('DOMNodeInserted','target',{relatedNode: other}),
-      eventObj('DOMNodeInsertedIntoDocument','target',{bubbles:false})
+      eventObj('DOMNodeInsertedIntoDocument','target',{bubbles:false}),
+      eventObj('DOMNodeInsertedIntoDocument','Text node Hello',{bubbles:false}),
+      eventObj('DOMSubtreeModified','other'),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
+      [1, 'parent', 'capture'],
+      [1, 'target', 'capture'],
+      [1, 'target'], // DOMNodeInsertedIntoDocument doesn't bubble
+      [2, 'parent', 'capture'],
+      [2, 'target', 'capture'],
+      [3, 'parent', 'capture'],
+      [3, 'parent'],
     ],
     () => other.appendChild(target));
 
   await testOne(state,'Create attribute',[
       eventObj('DOMSubtreeModified','target'),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
     ],
     () => target.setAttribute('test','foo'));
 
-  await testOne(state,'Change attribute value',[],
+  await testOne(state,'Change attribute value',[], [],
     () => target.setAttribute('test','bar'));
 
-  await testOne(state, 'Change attribute value (direct)',[],
+  await testOne(state, 'Change attribute value (direct)',[], [],
     () => {target.attributes[1].value = 'bar'});
 
   await testOne(state,'Remove attribute',[
       eventObj('DOMSubtreeModified','target'),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
     ],
     () => target.removeAttribute('test'));
 
   await testOne(state,'Replace children',[
-      eventObj('DOMNodeRemoved','Text node Hello',{relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMNodeRemoved','Text node Hello',{relatedNode: target}),
+      eventObj('DOMNodeRemovedFromDocument','Text node Hello',{relatedNode: target, bubbles:false}),
       eventObj('DOMSubtreeModified','target'),
-      eventObj('DOMNodeInserted','Text node Hello there',{relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMNodeInserted','Text node Hello there',{relatedNode: target}),
+      eventObj('DOMNodeInsertedIntoDocument','Text node Hello there',{relatedNode: target, bubbles:false}),
       eventObj('DOMSubtreeModified','target'),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
+      [1, 'parent', 'capture'],
+      [1, 'target', 'capture'],
+      [2, 'parent', 'capture'],
+      [2, 'target', 'capture'],
+      [2, 'target'],
+      [2, 'parent'],
+      [3, 'parent', 'capture'],
+      [3, 'target', 'capture'],
+      [3, 'target'],
+      [3, 'parent'],
+      [4, 'parent', 'capture'],
+      [4, 'target', 'capture'],
+      [5, 'parent', 'capture'],
+      [5, 'target', 'capture'],
+      [5, 'target'],
+      [5, 'parent'],
     ],
     () => target.replaceChildren(document.createTextNode('Hello there')));
 
   await testOne(state, 'Replace text content',[
-      eventObj('DOMCharacterDataModified','Text node foo',{currentTarget: target, eventPhase: 3, newValue: 'foo', prevValue: 'Hello there'}),
-      eventObj('DOMSubtreeModified','Text node foo',{currentTarget: target, eventPhase: 3}),
+      eventObj('DOMCharacterDataModified','Text node foo',{newValue: 'foo', prevValue: 'Hello there'}),
+      eventObj('DOMSubtreeModified','Text node foo',{}),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
+      [1, 'parent', 'capture'],
+      [1, 'target', 'capture'],
+      [1, 'target'],
+      [1, 'parent'],
     ],
     () => target.firstChild.textContent = "foo");
 
   await testOne(state, 'Append child node',[
-      eventObj('DOMNodeInserted','div', {relatedNode: target, currentTarget: target, eventPhase: 3}),
+      eventObj('DOMNodeInserted','div', {relatedNode: target}),
+      eventObj('DOMNodeInsertedIntoDocument','div', {relatedNode: target, bubbles: false}),
       eventObj('DOMSubtreeModified','target'),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
+      [1, 'parent', 'capture'],
+      [1, 'target', 'capture'],
+      [2, 'parent', 'capture'],
+      [2, 'target', 'capture'],
+      [2, 'target'],
+      [2, 'parent'],
     ],
     () => {
       const div = document.createElement('div');
@@ -248,7 +347,12 @@ async function runAllTests(state) {
     });
 
   await testOne(state, 'Create child node attribute',[
-      eventObj('DOMSubtreeModified','div',{currentTarget: target, eventPhase: 3}),
+      eventObj('DOMSubtreeModified','div',{currentTarget: target}),
+    ], [
+      [0, 'parent', 'capture'],
+      [0, 'target', 'capture'],
+      [0, 'target'],
+      [0, 'parent'],
     ],
     () => div.setAttribute('foo','bar'));
 }

@@ -26,7 +26,7 @@
   ];
 
   const baseEventObj = {
-    attrChange: 0, bubbles: true, cancelable: false, eventPhase: 2, newValue: '', prevValue: '', relatedNode: null
+    attrChange: 0, bubbles: true, cancelable: false, newValue: '', prevValue: '', relatedNode: null
   }
   function dispatchMutationEvent(type, target, options, fakeTarget) {
     let newEvent = Object.assign({}, baseEventObj);
