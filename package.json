@@ -1,6 +1,6 @@
 {
   "name": "mutation-events",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A polyfill for Mutation Events, using Mutation Observer",
   "keywords": "Mutation Events, Mutation Observer",
   "homepage": "https://github.com/mfreed7/mutation-events-polyfill#readme",
