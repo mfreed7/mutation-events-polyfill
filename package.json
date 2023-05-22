@@ -1,0 +1,12 @@
+{
+  "name": "mutation-events",
+  "version": "1.0.1",
+  "description": "A polyfill for Mutation Events, using Mutation Observer",
+  "keywords": "Mutation Events, Mutation Observer",
+  "homepage": "https://github.com/mfreed7/mutation-events-polyfill#readme",
+  "bugs": "https://github.com/mfreed7/mutation-events-polyfill/issues",
+  "author": "Mason Freed <mfreed@mfreed.com>",
+  "license": "BSD-3-Clause"
+} 
+
+
