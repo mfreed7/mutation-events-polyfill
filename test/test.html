@@ -79,11 +79,15 @@ function assert_events_equal(actualEvents,expectedEvents,description) {
   for(let i=0;i<actualEvents.length;++i) {
     let pass=true;
     for(let property of eventProperties) {
-      pass = assert(property in actualEvents[i],`${description}: event #${i} actual should have property ${property}`) && pass;
-      pass = assert(property in expectedEvents[i],`${description}: event #${i} expected should have property ${property}`) && pass;
+      let eventDescription = `event #${i}`;
+      if (property !== 'type') {
+        eventDescription += ` (${expectedEvents[i].type})`;
+      }
+      pass = assert(property in actualEvents[i],`${description}: ${eventDescription} actual should have property ${property}`) && pass;
+      pass = assert(property in expectedEvents[i],`${description}: ${eventDescription} expected should have property ${property}`) && pass;
       const actual = getDescription(actualEvents[i][property]);
       const expected = getDescription(expectedEvents[i][property]);
-      pass = assert(actual === expected,`${description}: event #${i} mismatch for ${property}, actual ${actual} vs. expected ${expected}`) && pass;
+      pass = assert(actual === expected,`${description}: ${eventDescription} mismatch for ${property}, actual ${actual} vs. expected ${expected}`) && pass;
     };
     if (!pass)
       return false;
