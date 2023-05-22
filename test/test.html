@@ -1,14 +1,24 @@
 <!DOCTYPE html>
 
+<script>
+// Test settings
+const testInsertedRemovedDocument = false; // Set to true to test DOMNodeInsertedIntoDocument and DOMNodeRemovedFromDocument events
+const testCaptureBubbleOrder = false; // Set to true to test the order of capture and bubble
+</script>
+
 <script src="../src/mutation_events.js"></script>
 
 <h3>Mutation Events Polyfill Test</h3>
-
+<h1 class=hide>Mutation Events are <u>enabled</u> in this browser. This test will
+    therefore only be testing the <u>native</u> implementation of Mutation
+    Events and <u>not the polyfill</u>.</h1>
+<h3 class=hide>In Chromium, the native behavior can be disabled via the flag
+  <code>chrome://flags/#mutation-events</code>.
+</h3>
 <div id=parent>
   <div id=target></div>
   <div id=other></div>
 </div>
-
 <table id=log></table>
 
 <style>
@@ -31,10 +41,16 @@
   html,body {
     width: 100%;
   }
+  .hide {
+    display:none;
+  }
 </style>
 
 <script>
 const nativelySupported = "MutationEvent" in window;
+if (nativelySupported) {
+  document.querySelectorAll('.hide').forEach(el => el.classList.remove('hide'));
+}
 function getDescription(n) {
   if (typeof n !== 'object' || n === null) {
     return String(n);
@@ -87,12 +103,13 @@ function assert_events_equal(actualEvents,expectedEvents,description) {
       pass = assert(property in expectedEvents[i],`${description}: ${eventDescription} expected should have property ${property}`) && pass;
       const actual = getDescription(actualEvents[i][property]);
       const expected = getDescription(expectedEvents[i][property]);
+      if (testCaptureBubbleOrder || property !== 'capture')
       pass = assert(actual === expected,`${description}: ${eventDescription} mismatch for ${property}, actual ${actual} vs. expected ${expected}`) && pass;
     };
     if (!pass)
       return false;
   }
-  return true;
+  return pass;
 }
 
 const target = document.getElementById('target');
@@ -106,7 +123,6 @@ const events = [
   'DOMNodeRemovedFromDocument',
   'DOMSubtreeModified',
 ];
-const testInsertedRemovedDocument = false; // Set to false to ignore these events
 
 let eventLog = [];
 let expectAllEmpty = false;

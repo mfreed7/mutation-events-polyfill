@@ -4,6 +4,58 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+// This is a polyfill of the Mutation Events:
+//   - DOMCharacterDataModified
+//   - DOMNodeInserted
+//   - DOMNodeInsertedIntoDocument
+//   - DOMNodeRemoved
+//   - DOMNodeRemovedFromDocument
+//   - DOMSubtreeModified
+//
+// Usage:
+// To use this polyfill, simply load it before any calls to `addEventListener`
+// for Mutation Events:
+//
+//   ```html
+//   <script src="mutation_events.js"></script>
+//   <div id=target></div>
+//   <script>
+//   target.addEventListener('DOMNodeInserted',() => {});
+//   </script>
+//   ```
+//
+// The implementation uses Mutation Observer, which should be well supported
+// by all evergreen browsers.
+//
+// There is no standard for Mutation Events, and indeed there are some
+// differences between rendering engines. This polyfill is based on the
+// behavior of Chrome v115, which differs from Safari and Firefox in a
+// few ways:
+//   1. Firefox does not fire DOMNodeInsertedIntoDocument or
+//      DOMNodeRemovedFromDocument. Chrome and Safari do. This polyfill does.
+//   2. Firefox fires DOMSubtreeModified events when attributes are modified
+//      via target.setAttribute(), but not when changed directly via
+//      target.attributes[0].value=. Chrome and Safari do not fire events
+//      in either of those cases, and neither does this polyfill.
+//   3. Chrome and Safari fire two sets of DOMSubtreeModified events when
+//      replaceChildren() is called, but the second set is fired at different
+//      times. Firefox only fires a single set of DOMSubtreeModified events.
+//      This polyfill fires events as fired by Chrome.
+//   4. Generally, Firefox fires bubble listeners before capture listeners
+//      on the target node, which seems broken anyway. This polyfill fires
+//      capture before bubble.
+//
+// There are also necessary differences between the behavior of Mutation Events
+// and this polyfill using Mutation Observer. Primarily, the difference is in
+// the timing: Mutation Events are synchronous, and happen *during* the
+// mutation, while Mutation Observers are fired at microtask timing. One place
+// where this leads to observable differences is during the DOMNodeRemoved
+// event. Real DOMNodeRemoved events are fired before the node is removed from
+// its parent, while this polyfill fires those after the removal is complete.
+// That leads to the event needing to be fired two places - on the removed
+// node and *also* on the observed target, because ordinarily the event bubbles
+// from the former to the latter.
+
 (function() {
   // Check if Mutation Events are supported by the browser
   if ("MutationEvent" in window) {
@@ -48,11 +100,8 @@
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-
-      // Set options based on mutation type
-      console.log(mutation);
+      //console.log(mutation);
       const is_contained = actualTarget === target || actualTarget.contains(target);
-
       if (type === "childList") {
         let firedRemoved = false;
         mutation.removedNodes.forEach(n => {
@@ -108,7 +157,6 @@
   const observedTargetsToObservers = new Map();
   const observerOptions = {subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true, characterDataOldValue: true};
 
-  // Create a function to start observing mutations
   function enableMutationEventPolyfill(target) {
     if (observedTargetsToObservers.has(target)) {
       observedTargetsToObservers.get(target).count++;
@@ -119,7 +167,6 @@
     observer.observe(target.parentNode || target, observerOptions);
   }
 
-  // Create a function to stop observing mutations
   function disableMutationEventPolyfill(target) {
     if (!observedTargetsToObservers.has(target))
       return;
@@ -147,12 +194,12 @@
   };
 
   // This removes the observers without requiring a call to removeEventListener,
-  // to make sure no more events are fired.
+  // to make sure no more events are fired. This should be used only for testing.
   window.disableMutationEventPolyfillForTesting = (target) => {
     while (observedTargetsToObservers.has(target)) {
       disableMutationEventPolyfill(target);
     }
   }
 
-  console.log('Installed Mutation Events polyfill');
+  console.log('Mutation Events polyfill installed.');
 })();
