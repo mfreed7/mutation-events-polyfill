@@ -97,13 +97,9 @@
           dispatchMutationEvent('DOMSubtreeModified', target, {attributeName: mutation.attributeName});
         }
       } else if (type === "characterData" && is_contained) {
-        const options = {
-          prevValue: mutation.oldValue,
-          newValue: target.textContent,
-        };
-        dispatchMutationEvent('DOMCharacterDataModified', target, options);
+        dispatchMutationEvent('DOMCharacterDataModified', target, {prevValue: mutation.oldValue,newValue: target.textContent});
         if (actualTarget !== target) {
-          dispatchMutationEvent('DOMSubtreeModified', target, options);
+          dispatchMutationEvent('DOMSubtreeModified', target);
         }
       }
     });
