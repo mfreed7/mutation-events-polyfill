@@ -20,6 +20,10 @@ for Mutation Events:
   </script>
   ```
 
+The polyfill monkeypatches `addEventListener` and `removeEventListener`
+and attaches a Mutation Observer whenever addEventListener is called with
+a Mutation Event name.
+
 ## Implementation / Behavior
 The implementation uses Mutation Observer, which should be well supported
 by all evergreen browsers.
@@ -54,4 +58,11 @@ its parent, while this polyfill fires those after the removal is complete.
 That leads to the event needing to be fired two places - on the removed
 node and *also* on the observed target, because ordinarily the event bubbles
 from the former to the latter.
+
+
+## Tests
+
+The `test/test.html` file performs several DOM mutations and monitors the
+events fired on the node and a parent. The test will fall back to testing the
+native feature, if `MutationEvent` is supported.
 
