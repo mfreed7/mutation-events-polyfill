@@ -5,8 +5,13 @@
   "keywords": "Mutation Events, Mutation Observer",
   "homepage": "https://github.com/mfreed7/mutation-events-polyfill#readme",
   "bugs": "https://github.com/mfreed7/mutation-events-polyfill/issues",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mfreed7/mutation-events-polyfill.git"
+  },
   "author": "Mason Freed <mfreed@mfreed.com>",
-  "license": "BSD-3-Clause"
-} 
-
+  "license": "BSD-3-Clause",
+  "main": "src/mutation_events.js",
+  "dependencies": {}
+}
 
