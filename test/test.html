@@ -2,8 +2,8 @@
 
 <script>
 // Test settings
-const testInsertedRemovedDocument = false; // Set to true to test DOMNodeInsertedIntoDocument and DOMNodeRemovedFromDocument events
-const testCaptureBubbleOrder = false; // Set to true to test the order of capture and bubble
+const testInsertedRemovedDocument = true; // Set to true to test DOMNodeInsertedIntoDocument and DOMNodeRemovedFromDocument events (false for Firefox)
+const testCaptureBubbleOrder = true; // Set to true to test the order of capture and bubble (false for Firefox)
 </script>
 
 <script src="../src/mutation_events.js"></script>
@@ -226,6 +226,22 @@ function eventObj(type, target, overrides) {
   }
   return newEvent;
 }
+
+// testOne tests a single kind of mutation, and looks for the expected set of
+// events.
+//   testOne(state,description_of_test_case,[
+//       // list of unique event types fired, e.g.
+//       eventObj(event_name,target,{event_settings}),
+//       eventObj('DOMNodeRemoved','target',{relatedNode: parent}),
+//     ],[
+//       // list of actual events fired, at which targets, in what phase, e.g.
+//       [index_into_unique_events_list, currentTarget, eventPhase],
+//       [0, 'parent', 'capture'],
+//       [0, 'target'],
+//     ],
+//       // DOM mutation lambda, e.g.
+//       () => target.remove()
+//   );
 
 async function runAllTests(state) {
   await testOne(state,'Node removal',[

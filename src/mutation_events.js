@@ -68,14 +68,14 @@
   }
   window.mutationEventsPolyfillInstalled = true;
 
-  const mutationEvents = [
+  const mutationEvents = new Set([
     'DOMCharacterDataModified',
     'DOMNodeInserted',
     'DOMNodeInsertedIntoDocument',
     'DOMNodeRemoved',
     'DOMNodeRemovedFromDocument',
     'DOMSubtreeModified',
-  ];
+  ]);
 
   const baseEventObj = {
     attrChange: 0, bubbles: true, cancelable: false, newValue: '', prevValue: '', relatedNode: null
@@ -180,14 +180,14 @@
   // Monkeypatch addEventListener/removeEventListener
   const originalAddEventListener = Element.prototype.addEventListener;
   Element.prototype.addEventListener = function(eventName, listener, options) {
-    if (mutationEvents.includes(eventName)) {
+    if (mutationEvents.has(eventName)) {
       enableMutationEventPolyfill(this);
     }
     originalAddEventListener.apply(this, arguments);
   };
   const originalRemoveEventListener = window.removeEventListener;
   window.removeEventListener = function(eventName, listener, options) {
-    if (mutationEvents.includes(eventName)) {
+    if (mutationEvents.has(eventName)) {
       disableMutationEventPolyfill(target);
     }
     originalRemoveEventListener.apply(window, arguments);
