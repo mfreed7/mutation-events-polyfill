@@ -45,7 +45,9 @@
 //      on the target node, which seems broken anyway. This polyfill fires
 //      capture before bubble.
 //
-// There are also necessary differences between the behavior of Mutation Events
+// ## Known Issues
+//
+// There are necessary differences between the behavior of Mutation Events
 // and this polyfill using Mutation Observer. Primarily, the difference is in
 // the timing: Mutation Events are synchronous, and happen *during* the
 // mutation, while Mutation Observers are fired at microtask timing. One place
@@ -59,7 +61,6 @@
 (function() {
   // Check if Mutation Events are supported by the browser
   if ("MutationEvent" in window) {
-    window.disableMutationEventPolyfillForTesting = () => {};
     return;
   }
   // Only run once
@@ -76,6 +77,9 @@
     'DOMNodeRemovedFromDocument',
     'DOMSubtreeModified',
   ]);
+  // Fire non-standard events so that deprecation warnings aren't fired in
+  // the browser.
+  const polyfillEventNameExtension = 'Polyfilled';
 
   const baseEventObj = {
     attrChange: 0, bubbles: true, cancelable: false, newValue: '', prevValue: '', relatedNode: null
@@ -85,7 +89,7 @@
     if (options) {
       newEvent = Object.assign(newEvent, options);
     }
-    const event = new Event(type,newEvent);
+    const event = new Event(type + polyfillEventNameExtension,newEvent);
     event.attrChange = newEvent.attrChange;
     event.newValue = newEvent.newValue;
     event.prevValue = newEvent.prevValue;
@@ -96,48 +100,54 @@
     target.dispatchEvent(event);
   }
 
-  function handleMutations(actualTarget, mutations) {
+  function handleMutations(listeningElement, mutations) {
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-      //console.log(mutation);
-      const is_contained = actualTarget === target || actualTarget.contains(target);
+      console.log(listeningElement,target,mutation);
+      const is_contained = listeningElement === target || listeningElement.contains(target);
       if (type === "childList") {
         let firedRemoved = false;
         mutation.removedNodes.forEach(n => {
-          if (n === actualTarget || target === actualTarget) {
+          if (n === listeningElement || target === listeningElement) {
             firedRemoved = true;
-            dispatchMutationEvent('DOMNodeRemoved', n);
-            if (target === actualTarget) {
+            if (target === listeningElement) {
               // The actual DOMNodeRemoved event is fired *before* the node is
               // removed, which means it bubbles up to old parents. However,
               // Mutation Observer fires after the fact. So we need to fire a
-              // DOMNodeRemoved on the disconnected node, *plus* fire a fake
-              // one at actualTarget with a "fake" target of the removed node.
-              dispatchMutationEvent('DOMNodeRemoved', actualTarget, undefined, n);
+              // fake DOMNodeRemoved on the listeningElement for capturing
+              // listeners, then fire the regular DOMNodeRemoved on the target,
+              // then fire another DOMNodeRemoved on the listeningElement for
+              // bubbling listeners.
+              dispatchMutationEvent('DOMNodeRemovedCapturing', listeningElement, undefined, n);
+            }
+            dispatchMutationEvent('DOMNodeRemovedCapturing', n);
+            dispatchMutationEvent('DOMNodeRemovedBubbling', n);
+            if (target === listeningElement) {
+              dispatchMutationEvent('DOMNodeRemovedBubbling', listeningElement, undefined, n);
             }
             // This should be conditional on being in the document before!
-            if (n === actualTarget && !actualTarget.isConnected) {
-              dispatchMutationEvent('DOMNodeRemovedFromDocument', actualTarget, {bubbles: false});
+            if (!n.isConnected) {
+              dispatchMutationEvent('DOMNodeRemovedFromDocument', listeningElement, {bubbles: false});
             }
           }
         });
-        if (firedRemoved && actualTarget===target) {
-          dispatchMutationEvent('DOMSubtreeModified', actualTarget, {relatedNode: target});
+        if (firedRemoved && listeningElement===target) {
+          dispatchMutationEvent('DOMSubtreeModified', listeningElement, {relatedNode: target});
         }
         let firedInserted = false;
         mutation.addedNodes.forEach(n => {
-          if (n === actualTarget || target === actualTarget) {
+          if (n === listeningElement || target === listeningElement) {
             firedInserted = true;
             dispatchMutationEvent('DOMNodeInserted', n);
             // This should be conditional on not being in the document before!
-            if (n === actualTarget && actualTarget.isConnected) {
-              dispatchMutationEvent('DOMNodeInsertedIntoDocument', actualTarget, {bubbles: false});
+            if (n === listeningElement && listeningElement.isConnected) {
+              dispatchMutationEvent('DOMNodeInsertedIntoDocument', listeningElement, {bubbles: false});
             }
           }
         });
-        if (firedInserted && actualTarget===target) {
-          dispatchMutationEvent('DOMSubtreeModified', actualTarget, {relatedNode: target});
+        if (firedInserted && listeningElement===target) {
+          dispatchMutationEvent('DOMSubtreeModified', listeningElement, {relatedNode: target});
         }
       } else if (type === "attributes" && is_contained) {
         // Attribute changes only fire DOMSubtreeModified, and only if the attribute
@@ -147,7 +157,7 @@
         }
       } else if (type === "characterData" && is_contained) {
         dispatchMutationEvent('DOMCharacterDataModified', target, {prevValue: mutation.oldValue,newValue: target.textContent});
-        if (actualTarget !== target) {
+        if (listeningElement !== target) {
           dispatchMutationEvent('DOMSubtreeModified', target);
         }
       }
@@ -179,27 +189,41 @@
 
   // Monkeypatch addEventListener/removeEventListener
   const originalAddEventListener = Element.prototype.addEventListener;
+  function getAugmentedListener(eventName, listener, options) {
+    if (mutationEvents.has(eventName)) {
+      let fullEventName = eventName + polyfillEventNameExtension;
+      if (eventName === 'DOMNodeRemoved') {
+        // Special casing for bubbling vs. capturing listeners.
+        let isCapture = options && (options === true || options.capture);
+        fullEventName = eventName + (isCapture ? 'Capturing' : 'Bubbling') + polyfillEventNameExtension;
+      }
+      return {fullEventName, augmentedListener: (event) => {
+        // Remove polyfillEventNameExtension and Capturing/Bubbling:
+        Object.defineProperty(event, 'type', {writable: false, value: eventName});
+        listener(event);
+      }};
+    }
+    return {fullEventName: eventName,augmentedListener: listener};
+  }
   Element.prototype.addEventListener = function(eventName, listener, options) {
     if (mutationEvents.has(eventName)) {
       enableMutationEventPolyfill(this);
+      const {augmentedListener,fullEventName} = getAugmentedListener(...arguments);
+      originalAddEventListener.apply(this, [fullEventName, augmentedListener, options]);
+      return;
     }
     originalAddEventListener.apply(this, arguments);
   };
   const originalRemoveEventListener = window.removeEventListener;
-  window.removeEventListener = function(eventName, listener, options) {
+  Element.prototype.removeEventListener = function(eventName, listener, options) {
     if (mutationEvents.has(eventName)) {
-      disableMutationEventPolyfill(target);
+      disableMutationEventPolyfill(this);
+      const {augmentedListener,fullEventName} = getAugmentedListener(...arguments);
+      originalRemoveEventListener.apply(this, [fullEventName, augmentedListener, options]);
+      return;
     }
-    originalRemoveEventListener.apply(window, arguments);
+    originalRemoveEventListener.apply(this, arguments);
   };
-
-  // This removes the observers without requiring a call to removeEventListener,
-  // to make sure no more events are fired. This should be used only for testing.
-  window.disableMutationEventPolyfillForTesting = (target) => {
-    while (observedTargetsToObservers.has(target)) {
-      disableMutationEventPolyfill(target);
-    }
-  }
 
   console.log('Mutation Events polyfill installed.');
 })();

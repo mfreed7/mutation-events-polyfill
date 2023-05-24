@@ -160,6 +160,16 @@ async function testOne(state, description, eventsList, expectedEventOrder, actio
 async function testHarness() {
   // Test for mutation events, with and without polyfill
 
+  let listenersAdded = [];
+  function addListener(element,eventName,listener,options) {
+    listenersAdded.push([element,eventName,listener,options]);
+    element.addEventListener(eventName,listener,options);
+  }
+  function removeAllListeners() {
+    for(let row of listenersAdded) {
+      row[0].removeEventListener(row[1],row[2],row[3]);
+    }
+  }
   events.forEach(evt => {
     function listener(capture) {
       return (e) => {
@@ -172,10 +182,10 @@ async function testHarness() {
         eventLog.push(eventCopy);
       }
     }
-    target.addEventListener(evt,listener(false),{capture: false});
-    target.addEventListener(evt,listener(true),{capture: true});
-    parent.addEventListener(evt,listener(false),{capture: false});
-    parent.addEventListener(evt,listener(true),{capture: true});
+    addListener(target,evt,listener(false),{capture: false});
+    addListener(target,evt,listener(true), {capture: true});
+    addListener(parent,evt,listener(false),{capture: false});
+    addListener(parent,evt,listener(true), {capture: true});
   });
 
   let left=2;
@@ -193,20 +203,11 @@ async function testHarness() {
     eventLog = [];
 
     if (left) {
-      // Now disable and check that the correct thing happens
-      disableMutationEventPolyfillForTesting(target);
-      disableMutationEventPolyfillForTesting(parent);
-      // If mutation events are natively supported, expect the same events.
-      // If not, expect no events after the polyfill is disabled.
-      if (!nativelySupported) {
-        console.log('Mutation Events NATIVELY DISABLED - verifying no events');
-        state = 'Polyfill DISABLED';
-        expectAllEmpty = true;
-      } else {
-        console.log('Mutation Events NATIVELY ENABLED - verifying the same events are fired');
-        state = 'Native feature (retry)';
-        assert(expectTrustedEvents,'problem');
-      }
+      // Now remove event listeners and make sure we don't get any events.
+      removeAllListeners();
+      console.log('Listeners removed - verifying no events');
+      state = 'Listeners removed';
+      expectAllEmpty = true;
       --left;
     }
   }
