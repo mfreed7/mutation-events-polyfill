@@ -107,32 +107,24 @@
       console.log(listeningElement,target,mutation);
       const is_contained = listeningElement === target || listeningElement.contains(target);
       if (type === "childList") {
-        let firedRemoved = false;
+        let fireSubtreeModified = false;
         mutation.removedNodes.forEach(n => {
-          if (n === listeningElement || target === listeningElement) {
-            firedRemoved = true;
-            if (target === listeningElement) {
-              // The actual DOMNodeRemoved event is fired *before* the node is
-              // removed, which means it bubbles up to old parents. However,
-              // Mutation Observer fires after the fact. So we need to fire a
-              // fake DOMNodeRemoved on the listeningElement for capturing
-              // listeners, then fire the regular DOMNodeRemoved on the target,
-              // then fire another DOMNodeRemoved on the listeningElement for
-              // bubbling listeners.
-              dispatchMutationEvent('DOMNodeRemovedCapturing', listeningElement, undefined, n);
-            }
-            dispatchMutationEvent('DOMNodeRemovedCapturing', n);
-            dispatchMutationEvent('DOMNodeRemovedBubbling', n);
-            if (target === listeningElement) {
-              dispatchMutationEvent('DOMNodeRemovedBubbling', listeningElement, undefined, n);
-            }
+          fireSubtreeModified = fireSubtreeModified || n === listeningElement || target === listeningElement;
+          if (target === listeningElement) {
+            dispatchMutationEvent('DOMNodeRemoved', n);
+            // The actual DOMNodeRemoved event is fired *before* the node is
+            // removed, which means it bubbles up to old parents. However,
+            // Mutation Observer fires after the fact. So we need to fire the
+            // regular DOMNodeRemoved event on the target, but then fire
+            // another "fake" DOMNodeRemoved event on the target.
+            dispatchMutationEvent('DOMNodeRemoved', listeningElement, undefined, n);
             // This should be conditional on being in the document before!
             if (!n.isConnected) {
               dispatchMutationEvent('DOMNodeRemovedFromDocument', listeningElement, {bubbles: false});
             }
           }
         });
-        if (firedRemoved && listeningElement===target) {
+        if (fireSubtreeModified && listeningElement===target) {
           dispatchMutationEvent('DOMSubtreeModified', listeningElement, {relatedNode: target});
         }
         let firedInserted = false;
@@ -191,13 +183,8 @@
   const originalAddEventListener = Element.prototype.addEventListener;
   function getAugmentedListener(eventName, listener, options) {
     if (mutationEvents.has(eventName)) {
-      let fullEventName = eventName + polyfillEventNameExtension;
-      if (eventName === 'DOMNodeRemoved') {
-        // Special casing for bubbling vs. capturing listeners.
-        let isCapture = options && (options === true || options.capture);
-        fullEventName = eventName + (isCapture ? 'Capturing' : 'Bubbling') + polyfillEventNameExtension;
-      }
-      return {fullEventName, augmentedListener: (event) => {
+      return {fullEventName: eventName + polyfillEventNameExtension,
+        augmentedListener: (event) => {
         // Remove polyfillEventNameExtension and Capturing/Bubbling:
         Object.defineProperty(event, 'type', {writable: false, value: eventName});
         listener(event);

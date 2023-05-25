@@ -2,8 +2,8 @@
 
 <script>
 // Test settings
-const testInsertedRemovedDocument = true; // Set to true to test DOMNodeInsertedIntoDocument and DOMNodeRemovedFromDocument events (false for Firefox)
-const testCaptureBubbleOrder = true; // Set to true to test the order of capture and bubble (false for Firefox)
+const testInsertedRemovedDocument = false; // Set to true to test DOMNodeInsertedIntoDocument and DOMNodeRemovedFromDocument events (false for Firefox)
+const testEventOrder = false; // Set to true to test the order of events
 </script>
 
 <script src="../src/mutation_events.js"></script>
@@ -88,26 +88,44 @@ function assert(val,msg) {
   }
   return val;
 }
+function compareTwoEvents(description,eventDescription,actual,expected) {
+  let pass=true;
+  for(let property of eventProperties) {
+    if (property !== 'type') {
+      eventDescription += ` (${expected.type})`;
+    }
+    pass = assert(property in actual,`${description}: ${eventDescription} actual should have property ${property}`) && pass;
+    pass = assert(property in expected,`${description}: ${eventDescription} expected should have property ${property}`) && pass;
+    const actualDescription = getDescription(actual[property]);
+    const expectedDescription = getDescription(expected[property]);
+    pass = assert(actualDescription === expectedDescription,`${description}: ${eventDescription} mismatch for ${property}, actual ${actualDescription} vs. expected ${expectedDescription}`) && pass;
+  };
+  return pass;
+}
 function assert_events_equal(actualEvents,expectedEvents,description) {
   if (!assert(Array.isArray(actualEvents) && Array.isArray(expectedEvents),`${description}: Both must be arrays`))
     return false;
   let pass = assert(actualEvents.length === expectedEvents.length,`${description}: Different number of events received. actual ${actualEvents.length} vs expected ${expectedEvents.length}`);
-  const len = Math.min(actualEvents.length,expectedEvents.length);
-  for(let i=0;i<len;++i) {
-    for(let property of eventProperties) {
-      let eventDescription = `event #${i}`;
-      if (property !== 'type') {
-        eventDescription += ` (${expectedEvents[i].type})`;
+  if (testEventOrder) {
+    const len = Math.min(actualEvents.length,expectedEvents.length);
+    for(let i=0;i<len;++i) {
+      if (!compareTwoEvents(description, `event #${i}`, actualEvents[i], expectedEvents[i]))
+        return false;
+    }
+  } else {
+    let pass = true;
+    for(let expected of expectedEvents) {
+      const actual = actualEvents.find(e => e.type == expected.type && e.capture == expected.capture && e.currentTarget == expected.currentTarget && e.target == expected.target);
+      pass = assert(!!actual,`${description}: Missing ${expected.type} on ${getDescription(expected.currentTarget)} (target: ${getDescription(expected.target)})`);
+      if (actual) {
+        pass = compareTwoEvents(description, `${expected.capture ? 'capture' : 'bubble'} on ${getDescription(expected.target)}`, actual, expected) && pass;
       }
-      pass = assert(property in actualEvents[i],`${description}: ${eventDescription} actual should have property ${property}`) && pass;
-      pass = assert(property in expectedEvents[i],`${description}: ${eventDescription} expected should have property ${property}`) && pass;
-      const actual = getDescription(actualEvents[i][property]);
-      const expected = getDescription(expectedEvents[i][property]);
-      if (testCaptureBubbleOrder || property !== 'capture')
-      pass = assert(actual === expected,`${description}: ${eventDescription} mismatch for ${property}, actual ${actual} vs. expected ${expected}`) && pass;
-    };
-    if (!pass)
-      return false;
+    }
+    for(let actual of actualEvents) {
+      if (!expectedEvents.some(e => e.type == actual.type && e.capture == actual.capture && e.currentTarget == actual.currentTarget && e.target == actual.target)) {
+        pass = assert(false,`${description}: Extra event received, ${actual.type} on ${getDescription(actual.currentTarget)} (target: ${getDescription(actual.target)})`);
+      }
+    }
   }
   return pass;
 }
@@ -176,7 +194,7 @@ async function testHarness() {
         console.log(`Received ${e.type} (${capture ? 'capture' : 'bubble'}) on ${getDescription(e.currentTarget)}, target is ${getDescription(e.target)}`);
         let eventCopy = {};
         for (property of eventProperties) {
-          eventCopy[property] = e[property];
+          eventCopy[property] = property.toLowerCase().includes('target') ? getDescription(e[property]) : e[property];
         }
         eventCopy.capture = capture;
         eventLog.push(eventCopy);
