@@ -19,7 +19,12 @@ const testEventOrder = false; // Set to true to test the order of events
   <div id=target></div>
   <div id=other></div>
 </div>
+<h3>Results:</h3>
 <table id=log></table>
+<h3>Detailed event logs:</h3>
+<table id=details>
+  <tr><th>Case</th><th>Actual Events</th><th>Expected Events</th></tr>
+</table>
 
 <style>
   #log td:nth-child(1) {
@@ -31,6 +36,15 @@ const testEventOrder = false; // Set to true to test the order of events
     padding-left: 2em;
     text-indent: -2em;
     width:100%;
+  }
+  #details {
+    border-collapse:collapse;
+  }
+  #details td {
+    white-space: pre-wrap;
+  }
+  #details th, #details td {
+    border: 1px solid black;
   }
   td.pass {
     background-color: lightgreen;
@@ -105,7 +119,17 @@ function compareTwoEvents(description,eventDescription,actual,expected) {
 function assert_events_equal(actualEvents,expectedEvents,description) {
   if (!assert(Array.isArray(actualEvents) && Array.isArray(expectedEvents),`${description}: Both must be arrays`))
     return false;
-  let pass = assert(actualEvents.length === expectedEvents.length,`${description}: Different number of events received. actual ${actualEvents.length} vs expected ${expectedEvents.length}`);
+  const detailsTable = document.getElementById('details');
+  const row = detailsTable.appendChild(document.createElement('tr'));
+  const eventToDescription = (e) => `${e.capture ? '⬇️' : '⬆️'}<code>${e.type}</code> on <code>${e.target}</code> at <code>${e.currentTarget}</code>`;
+  const eventsToDescription = (es) => es.map(eventToDescription).join('\n');
+  row.innerHTML = `<td>${description}</td><td>${eventsToDescription(actualEvents)}</td><td>${eventsToDescription(expectedEvents)}</td>`;
+  pass = true;
+  if (actualEvents.length < expectedEvents.length) {
+    pass = assert(false,`${description}: Not enough events received. actual ${actualEvents.length} vs expected ${expectedEvents.length}`) && pass;
+  } else if (actualEvents.length > expectedEvents.length) {
+    pass = assert(false,`${description}: Too many events received. actual ${actualEvents.length} vs expected ${expectedEvents.length}`) && pass;
+  }
   if (testEventOrder) {
     const len = Math.min(actualEvents.length,expectedEvents.length);
     for(let i=0;i<len;++i) {
