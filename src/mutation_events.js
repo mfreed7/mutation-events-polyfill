@@ -118,84 +118,97 @@
     target.dispatchEvent(event);
   }
 
-  function handleMutations(listeningNode, mutations) {
+  function walk(n,action) {
+    const walker = document.createTreeWalker(n, NodeFilter.SHOW_ALL);
+    while (walker.nextNode()) {
+      action(walker.currentNode);
+    }
+  }
+
+  const documentsToObservers = new Map();
+  const listeningNodes = new Set();
+
+  function handleMutations(mutations) {
+    const subtreeModified = [];
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-      console.log('listener:',listeningNode,'target:',target,mutation);
-      const is_contained = listeningNode === target || listeningNode.contains(target);
-      if (type === "attributes" && is_contained) {
+      console.log('target:', target, mutation);
+      if (type === "attributes") {
         // Attribute changes only fire DOMSubtreeModified, and only if the attribute
         // is being added or removed, and not just changed.
         if (mutation.oldValue === null || target.getAttribute(mutation.attributeName) === null) {
           dispatchMutationEvent('DOMSubtreeModified', target, {attributeName: mutation.attributeName});
         }
-      } else if (type === "characterData" && is_contained) {
+      } else if (type === "characterData") {
         dispatchMutationEvent('DOMCharacterDataModified', target, {prevValue: mutation.oldValue,newValue: target.textContent});
-        if (listeningNode !== target) {
-          dispatchMutationEvent('DOMSubtreeModified', target);
-        }
+        subtreeModified.push(target);
       } else if (type === "childList") {
-        let fireSubtreeModified = false;
         mutation.removedNodes.forEach(n => {
-          fireSubtreeModified = fireSubtreeModified || listeningNode.contains(n) || target === listeningNode;
-          console.log('fireSubtreeModified',fireSubtreeModified);
-          if (target === listeningNode) {
-            dispatchMutationEvent('DOMNodeRemoved', n);
-            // The actual DOMNodeRemoved event is fired *before* the node is
-            // removed, which means it bubbles up to old parents. However,
-            // Mutation Observer fires after the fact. So we need to fire the
-            // regular DOMNodeRemoved event on the target, but then fire
-            // another "fake" DOMNodeRemoved event on the target.
-            dispatchMutationEvent('DOMNodeRemoved', listeningNode, undefined, n);
-            // This should be conditional on being in the document before!
-            if (!n.isConnected) {
-              dispatchMutationEvent('DOMNodeRemovedFromDocument', listeningNode, {bubbles: false});
-            }
-          }
+          subtreeModified.push(target);
+          dispatchMutationEvent('DOMNodeRemoved', n);
+          // The actual DOMNodeRemoved event is fired *before* the node is
+          // removed, which means it bubbles up to old parents. However,
+          // Mutation Observer fires after the fact. So we need to fire the
+          // regular DOMNodeRemoved event on the removed node, but then fire
+          // another "fake" DOMNodeRemoved event on the parent, to simulate
+          // bubbling.
+          dispatchMutationEvent('DOMNodeRemoved', target, undefined, n);
+
+          // Dispatch DOMNodeRemovedFromDocument on all removed nodes
+          walk(n, (node) => dispatchMutationEvent('DOMNodeRemovedFromDocument', node, {bubbles: false}));
         });
-        if (fireSubtreeModified && listeningNode===target) {
-          dispatchMutationEvent('DOMSubtreeModified', listeningNode, {relatedNode: target});
-        }
-        fireSubtreeModified = false;
         mutation.addedNodes.forEach(n => {
-          if (listeningNode === n || listeningNode.contains(n)) {
-            fireSubtreeModified = fireSubtreeModified || listeningNode.contains(n);
-            console.log('fireSubtreeModified',fireSubtreeModified);
-            dispatchMutationEvent('DOMNodeInserted', n);
-            // This should be conditional on not being in the document before!
-            if (n.isConnected) {
-              dispatchMutationEvent('DOMNodeInsertedIntoDocument', listeningNode, {bubbles: false});
-            }
-          }
+          subtreeModified.push(target);
+          dispatchMutationEvent('DOMNodeInserted', n);
+
+          // Dispatch DOMNodeRemovedFromDocument on all inserted nodes
+          walk(n, (node) => dispatchMutationEvent('DOMNodeInsertedIntoDocument', node, {bubbles: false}));
         });
-        if (fireSubtreeModified) {
-          dispatchMutationEvent('DOMSubtreeModified', listeningNode, {relatedNode: target});
-        }
       }
     });
+    for(let touchedNode of subtreeModified) {
+      dispatchMutationEvent('DOMSubtreeModified', touchedNode);
+    }
   }
 
-  const observedTargetsToObservers = new Map();
-  const observerOptions = {subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true, characterDataOldValue: true};
+  function getRootElement(el) {
+    let rootNode = el.getRootNode();
+    while (rootNode instanceof ShadowRoot) {
+      rootNode = rootNode.host.getRootNode();
+    }
+    if (rootNode instanceof Document) {
+      return rootNode.documentElement;
+    }
+    // Disconnected element - likely has problems.
+    return rootNode;
+  }
 
+  const observerOptions = {subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true, characterDataOldValue: true};
   function enableMutationEventPolyfill(target) {
-    if (observedTargetsToObservers.has(target)) {
-      observedTargetsToObservers.get(target).count++;
+    if (listeningNodes.has(target))
+      return;
+    listeningNodes.add(target);
+    const rootElement = getRootElement(target);
+    if (documentsToObservers.has(rootElement)) {
+      documentsToObservers.get(rootElement).count++;
       return;
     }
-    const observer = new MutationObserver(handleMutations.bind(null,target));
-    observedTargetsToObservers.set(target, {observer,count: 1});
-    // This likely has problems when target is not connected.
-    observer.observe(target.parentNode || target, observerOptions);
+    const observer = new MutationObserver(handleMutations);
+    documentsToObservers.set(rootElement, {observer,count: 1});
+    observer.observe(rootElement, observerOptions);
   }
 
   function disableMutationEventPolyfill(target) {
-    if (!observedTargetsToObservers.has(target))
+    if (!listeningNodes.has(target))
       return;
-    if (--observedTargetsToObservers.get(target).count === 0) {
-      const observer = observedTargetsToObservers.get(target).observer;
-      observedTargetsToObservers.delete(target);
+    listeningNodes.delete(target);
+    const rootElement = getRootElement(target);
+    if (!documentsToObservers.has(rootElement))
+      return;
+    if (--documentsToObservers.get(rootElement).count === 0) {
+      const observer = documentsToObservers.get(rootElement).observer;
+      documentsToObservers.delete(rootElement);
       observer.disconnect();
     }
   }
