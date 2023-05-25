@@ -58,6 +58,24 @@
 // node and *also* on the observed target, because ordinarily the event bubbles
 // from the former to the latter.
 
+// Mutation events, for a listener on `target`:
+//  DOMNodeInserted: fired whenever a node is inserted into a new parent. This
+//                   event bubbles up through the *NEW* parent.
+//  DOMNodeRemoved: fired whenever a node is removed from a parent. This event
+//                  bubbles up through the *OLD* parent.
+//  DOMSubtreeModified: fired whenever any node in the SUBTREE of `target` is
+//                  modified, including: a) node inserted, b) node removed,
+//                  c) attributes added, d) attributes removed, or e) character
+//                  data modified. This event is also fired when attributes are
+//                  added or removed from `target`. It is not fired when
+//                  existing attributes are changed.
+//  DOMNodeInsertedIntoDocument: fired whenever `target` is inserted into a new
+//                               document. Does not bubble.
+//  DOMNodeRemovedFromDocument: fired whenever `target` is removed from its
+//                               document. Does not bubble.
+//  DOMCharacterDataModified: fired whenever a text/comment node has its data
+//                            modified.
+
 (function() {
   // Check if Mutation Events are supported by the browser
   if ("MutationEvent" in window) {
@@ -100,48 +118,13 @@
     target.dispatchEvent(event);
   }
 
-  function handleMutations(listeningElement, mutations) {
+  function handleMutations(listeningNode, mutations) {
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-      console.log(listeningElement,target,mutation);
-      const is_contained = listeningElement === target || listeningElement.contains(target);
-      if (type === "childList") {
-        let fireSubtreeModified = false;
-        mutation.removedNodes.forEach(n => {
-          fireSubtreeModified = fireSubtreeModified || n === listeningElement || target === listeningElement;
-          if (target === listeningElement) {
-            dispatchMutationEvent('DOMNodeRemoved', n);
-            // The actual DOMNodeRemoved event is fired *before* the node is
-            // removed, which means it bubbles up to old parents. However,
-            // Mutation Observer fires after the fact. So we need to fire the
-            // regular DOMNodeRemoved event on the target, but then fire
-            // another "fake" DOMNodeRemoved event on the target.
-            dispatchMutationEvent('DOMNodeRemoved', listeningElement, undefined, n);
-            // This should be conditional on being in the document before!
-            if (!n.isConnected) {
-              dispatchMutationEvent('DOMNodeRemovedFromDocument', listeningElement, {bubbles: false});
-            }
-          }
-        });
-        if (fireSubtreeModified && listeningElement===target) {
-          dispatchMutationEvent('DOMSubtreeModified', listeningElement, {relatedNode: target});
-        }
-        let firedInserted = false;
-        mutation.addedNodes.forEach(n => {
-          if (n === listeningElement || target === listeningElement) {
-            firedInserted = true;
-            dispatchMutationEvent('DOMNodeInserted', n);
-            // This should be conditional on not being in the document before!
-            if (n === listeningElement && listeningElement.isConnected) {
-              dispatchMutationEvent('DOMNodeInsertedIntoDocument', listeningElement, {bubbles: false});
-            }
-          }
-        });
-        if (firedInserted && listeningElement===target) {
-          dispatchMutationEvent('DOMSubtreeModified', listeningElement, {relatedNode: target});
-        }
-      } else if (type === "attributes" && is_contained) {
+      console.log('listener:',listeningNode,'target:',target,mutation);
+      const is_contained = listeningNode === target || listeningNode.contains(target);
+      if (type === "attributes" && is_contained) {
         // Attribute changes only fire DOMSubtreeModified, and only if the attribute
         // is being added or removed, and not just changed.
         if (mutation.oldValue === null || target.getAttribute(mutation.attributeName) === null) {
@@ -149,8 +132,45 @@
         }
       } else if (type === "characterData" && is_contained) {
         dispatchMutationEvent('DOMCharacterDataModified', target, {prevValue: mutation.oldValue,newValue: target.textContent});
-        if (listeningElement !== target) {
+        if (listeningNode !== target) {
           dispatchMutationEvent('DOMSubtreeModified', target);
+        }
+      } else if (type === "childList") {
+        let fireSubtreeModified = false;
+        mutation.removedNodes.forEach(n => {
+          fireSubtreeModified = fireSubtreeModified || listeningNode.contains(n) || target === listeningNode;
+          console.log('fireSubtreeModified',fireSubtreeModified);
+          if (target === listeningNode) {
+            dispatchMutationEvent('DOMNodeRemoved', n);
+            // The actual DOMNodeRemoved event is fired *before* the node is
+            // removed, which means it bubbles up to old parents. However,
+            // Mutation Observer fires after the fact. So we need to fire the
+            // regular DOMNodeRemoved event on the target, but then fire
+            // another "fake" DOMNodeRemoved event on the target.
+            dispatchMutationEvent('DOMNodeRemoved', listeningNode, undefined, n);
+            // This should be conditional on being in the document before!
+            if (!n.isConnected) {
+              dispatchMutationEvent('DOMNodeRemovedFromDocument', listeningNode, {bubbles: false});
+            }
+          }
+        });
+        if (fireSubtreeModified && listeningNode===target) {
+          dispatchMutationEvent('DOMSubtreeModified', listeningNode, {relatedNode: target});
+        }
+        fireSubtreeModified = false;
+        mutation.addedNodes.forEach(n => {
+          if (listeningNode === n || listeningNode.contains(n)) {
+            fireSubtreeModified = fireSubtreeModified || listeningNode.contains(n);
+            console.log('fireSubtreeModified',fireSubtreeModified);
+            dispatchMutationEvent('DOMNodeInserted', n);
+            // This should be conditional on not being in the document before!
+            if (n.isConnected) {
+              dispatchMutationEvent('DOMNodeInsertedIntoDocument', listeningNode, {bubbles: false});
+            }
+          }
+        });
+        if (fireSubtreeModified) {
+          dispatchMutationEvent('DOMSubtreeModified', listeningNode, {relatedNode: target});
         }
       }
     });
@@ -166,6 +186,7 @@
     }
     const observer = new MutationObserver(handleMutations.bind(null,target));
     observedTargetsToObservers.set(target, {observer,count: 1});
+    // This likely has problems when target is not connected.
     observer.observe(target.parentNode || target, observerOptions);
   }
 
@@ -185,7 +206,7 @@
     if (mutationEvents.has(eventName)) {
       return {fullEventName: eventName + polyfillEventNameExtension,
         augmentedListener: (event) => {
-        // Remove polyfillEventNameExtension and Capturing/Bubbling:
+        // Remove polyfillEventNameExtension:
         Object.defineProperty(event, 'type', {writable: false, value: eventName});
         listener(event);
       }};
