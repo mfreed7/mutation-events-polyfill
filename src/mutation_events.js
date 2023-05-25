@@ -69,10 +69,14 @@
 //                  data modified. This event is also fired when attributes are
 //                  added or removed from `target`. It is not fired when
 //                  existing attributes are changed.
-//  DOMNodeInsertedIntoDocument: fired whenever `target` is inserted into a new
-//                               document. Does not bubble.
-//  DOMNodeRemovedFromDocument: fired whenever `target` is removed from its
-//                               document. Does not bubble.
+//  DOMNodeInsertedIntoDocument: fired whenever a node is inserted. This event
+//                               does not bubble, but is fired on every sub-node
+//                               in the inserted tree, plus the (new) parent of
+//                               the inserted tree.
+//  DOMNodeRemovedFromDocument: fired whenever a node is removed. This event
+//                               does not bubble, but is fired on every sub-node
+//                               in the removed tree, plus the (old) parent of
+//                               the removed tree.
 //  DOMCharacterDataModified: fired whenever a text/comment node has its data
 //                            modified.
 
@@ -120,9 +124,9 @@
 
   function walk(n,action) {
     const walker = document.createTreeWalker(n, NodeFilter.SHOW_ALL);
-    while (walker.nextNode()) {
+    do {
       action(walker.currentNode);
-    }
+    } while (walker.nextNode());
   }
 
   const documentsToObservers = new Map();
@@ -133,7 +137,7 @@
     mutations.forEach(function (mutation) {
       const target = mutation.target;
       const type = mutation.type;
-      console.log('target:', target, mutation);
+      // console.log('target:', target, mutation);
       if (type === "attributes") {
         // Attribute changes only fire DOMSubtreeModified, and only if the attribute
         // is being added or removed, and not just changed.
@@ -157,12 +161,15 @@
 
           // Dispatch DOMNodeRemovedFromDocument on all removed nodes
           walk(n, (node) => dispatchMutationEvent('DOMNodeRemovedFromDocument', node, {bubbles: false}));
+          // In the same way as for DOMNodeRemoved, we also fire DOMNodeRemovedFromDocument
+          // on the parent node.
+          dispatchMutationEvent('DOMNodeRemovedFromDocument', target, {bubbles: false}, n);
         });
         mutation.addedNodes.forEach(n => {
           subtreeModified.push(target);
           dispatchMutationEvent('DOMNodeInserted', n);
 
-          // Dispatch DOMNodeRemovedFromDocument on all inserted nodes
+          // Dispatch DOMNodeInsertedIntoDocument on all inserted nodes
           walk(n, (node) => dispatchMutationEvent('DOMNodeInsertedIntoDocument', node, {bubbles: false}));
         });
       }
