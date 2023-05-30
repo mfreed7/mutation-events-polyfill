@@ -99,3 +99,10 @@ close.
 The `test/test.html` file performs several DOM mutations and monitors the
 events fired on the node and a parent. The test will fall back to testing the
 native feature, if `MutationEvent` is supported.
+
+## Improvements / Bugs
+
+If you find issues with the polyfill, feel free to file them [here](https://github.com/mfreed7/mutation-events-polyfill/issues).
+Even better, if you would like to contribute to this polyfill,
+I'm happy to review [pull requests](https://github.com/mfreed7/mutation-events-polyfill/pulls).
+Thanks in advance!
