@@ -1,4 +1,4 @@
-// Copyright (c) 2023, Mason Freed
+// Copyright (c) 2024, Mason Freed
 // All rights reserved.
 //
 // This source code is licensed under the BSD-style license found in the
@@ -16,10 +16,6 @@
 //   https://github.com/mfreed7/mutation-events-polyfill#readme
 
 (function() {
-  // Check if Mutation Events are supported by the browser
-  if ("MutationEvent" in window) {
-    return;
-  }
   // Only run once
   if (window.mutationEventsPolyfillInstalled) {
     return;
@@ -188,5 +184,5 @@
     originalRemoveEventListener.apply(this, arguments);
   };
 
-  console.log('Mutation Events polyfill installed.');
+  console.log(`Mutation Events polyfill installed (native feature: ${("MutationEvent" in window) ? "supported" : "not present"}).`);
 })();

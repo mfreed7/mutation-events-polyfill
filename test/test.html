@@ -6,25 +6,25 @@ const testInsertedRemovedDocument = true; // Set to true to test DOMNodeInserted
 const testEventOrder = false; // Set to true to test the order of events
 </script>
 
-<script src="../src/mutation_events.js"></script>
-
 <h3>Mutation Events Polyfill Test</h3>
-<h1 class=hide>Mutation Events are <u>enabled</u> in this browser. This test will
-    therefore only be testing the <u>native</u> implementation of Mutation
-    Events and <u>not the polyfill</u>.</h1>
-<h3 class=hide>In Chromium, the native behavior can be disabled via the flag
-  <code>chrome://flags/#mutation-events</code>.
-</h3>
-<div id=parent>
+<ul>
+  <li><p><label>Test using the polyfill<input type=checkbox id=use_polyfill></label><span id="not_supported"></span></p>
+  <li><p>Mutation Events are <u id="native_support"></u> in this browser. (In Chromium, see <code>chrome://flags/#mutation-events</code>.)</p>
+  <li><p>This test will test the <u id="what_to_test"></u>.</p>
+</ul>
+<button id="go">Run the test</button>
+<div id=results class="hide">
+  <h3>Results:</h3>
+  <table id=log></table>
+  <h3>Detailed event logs:</h3>
+  <table id=details>
+    <tr><th>Case</th><th>Actual Events</th><th>Expected Events</th></tr>
+  </table>
+</div>
+<div id=parent class="hide">
   <div id=target></div>
   <div id=other></div>
 </div>
-<h3>Results:</h3>
-<table id=log></table>
-<h3>Detailed event logs:</h3>
-<table id=details>
-  <tr><th>Case</th><th>Actual Events</th><th>Expected Events</th></tr>
-</table>
 
 <style>
   #log td:nth-child(1) {
@@ -62,9 +62,37 @@ const testEventOrder = false; // Set to true to test the order of events
 
 <script>
 const nativelySupported = "MutationEvent" in window;
-if (nativelySupported) {
-  document.querySelectorAll('.hide').forEach(el => el.classList.remove('hide'));
+const usePolyfill = document.querySelector('#use_polyfill');
+const goButton = document.querySelector('#go');
+const whatToTest = document.querySelector('#what_to_test');
+if (!nativelySupported) {
+  usePolyfill.checked = true;
+  usePolyfill.disabled = true;
+  document.querySelector('#not_supported').textContent = '(Mandatory: Native feature not supported)';
 }
+document.querySelector('#native_support').textContent = nativelySupported ? 'Supported' : 'NOT supported';
+usePolyfill.onchange = () => updateWhatToTest();
+updateWhatToTest();
+function updateWhatToTest() {
+  whatToTest.textContent = usePolyfill.checked ? 'POLYFILL' : 'NATIVE IMPLEMENTATION';
+}
+goButton.onclick = async () => {
+  goButton.disabled = true;
+  usePolyfill.disabled = true;
+  const loadPolyfill = usePolyfill.checked;
+  if (loadPolyfill) {
+    const polyfill = document.createElement('script');
+    polyfill.src = "../src/mutation_events.js";
+    const loaded = new Promise(resolve => polyfill.onload = resolve);
+    document.body.appendChild(polyfill);
+    await loaded;
+  }
+  document.querySelector('#results').classList.remove('hide');
+  document.querySelector('#parent').classList.remove('hide');
+  // Run the tests
+  testHarness();
+};
+
 function getDescription(n) {
   if (typeof n !== 'object' || n === null) {
     return String(n);
@@ -121,7 +149,7 @@ function assert_events_equal(actualEvents,expectedEvents,description) {
     return false;
   const detailsTable = document.getElementById('details');
   const row = detailsTable.appendChild(document.createElement('tr'));
-  const eventToDescription = (e) => `${e.capture ? '⬇️' : '⬆️'}<code>${e.type}</code> on <code>${e.target}</code> at <code>${e.currentTarget}</code>`;
+  const eventToDescription = (e) => `${e.capture ? '\u2b07\ufe0f' : '\u2b06\ufe0f'}<code>${e.type}</code> on <code>${e.target}</code> at <code>${e.currentTarget}</code>`;
   const eventsToDescription = (es) => es.map(eventToDescription).join('\n');
   row.innerHTML = `<td>${description}</td><td>${eventsToDescription(actualEvents)}</td><td>${eventsToDescription(expectedEvents)}</td>`;
   pass = true;
@@ -168,7 +196,6 @@ const events = [
 
 let eventLog = [];
 let expectAllEmpty = false;
-let expectTrustedEvents = nativelySupported;
 
 async function waitFrame() {
   await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -231,7 +258,7 @@ async function testHarness() {
   });
 
   let left=2;
-  let state = nativelySupported ? 'Native feature' : 'Polyfill ENABLED';
+  let state = usePolyfill.checked ? 'Polyfill ENABLED' : 'Native feature';
   while (left) {
     // Run all of the tests:
     await runAllTests(state);
@@ -263,7 +290,8 @@ function eventObj(type, target, overrides) {
   let newEvent = Object.assign({}, baseEventObj);
   newEvent.type = type;
   newEvent.target = target;
-  newEvent.isTrusted = expectTrustedEvents;
+  // Expect trusted events if using the native feature.
+  newEvent.isTrusted = !usePolyfill.checked;
   for(prop in overrides) {
     newEvent[prop] = overrides[prop];
   }
@@ -431,7 +459,5 @@ async function runAllTests(state) {
     ],
     () => div.setAttribute('foo','bar'));
 }
-
-testHarness();
 
 </script>
