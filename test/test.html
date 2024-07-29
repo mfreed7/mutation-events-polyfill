@@ -81,6 +81,8 @@ goButton.onclick = async () => {
   usePolyfill.disabled = true;
   const loadPolyfill = usePolyfill.checked;
   if (loadPolyfill) {
+    // This will tell the polyfill to load even if natively supported:
+    window.mutationEventsUsePolyfillAlways = true;
     const polyfill = document.createElement('script');
     polyfill.src = "../src/mutation_events.js";
     const loaded = new Promise(resolve => polyfill.onload = resolve);
@@ -458,6 +460,38 @@ async function runAllTests(state) {
       [0, 'parent'],
     ],
     () => div.setAttribute('foo','bar'));
+
+  // Manual test of MutationEvent interface
+  function testInterface(fn,desc) {
+    try {
+      result = fn();
+    } catch {
+      result = false;
+    }
+    addResult(result,desc);
+  }
+  testInterface(() => {return "MutationEvent" in window},"MutationEvent exists");
+  testInterface(() => {
+    try {
+      new MutationEvent('DOMNodeRemoved');
+      return false; // Explicit constructor should throw
+    } catch {
+      return true;
+    }
+  },"MutationEvent cannot be constructed");
+  testInterface(() => {return MutationEvent.MODIFICATION === 1},"MutationEvent.MODIFICATION exists");
+  testInterface(() => {return MutationEvent.ADDITION === 2},"MutationEvent.ADDITION exists");
+  testInterface(() => {return MutationEvent.REMOVAL === 3},"MutationEvent.REMOVAL exists");
+  testInterface(() => {return document.createEvent("MutationEvent") instanceof MutationEvent},"document.createEvent");
+  testInterface(() => {return document.createEvent("Event") instanceof Event},"document.createEvent doesn't break stuff");
+  testInterface(() => {return document.createEvent("MouseEvent") instanceof MouseEvent},"document.createEvent doesn't break stuff");
+  testInterface(() => {return document.createEvent("MouseEvents") instanceof MouseEvent},"document.createEvent doesn't break stuff");
+  testInterface(() => {return document.createEvent("MutationEvent").type === ""},"document.createEvent returns empty type");
+  testInterface(() => {
+    const evt = document.createEvent("MutationEvent");
+    evt.initMutationEvent('DOMNodeRemoved',true,true,null,"foo","bar","baz",1);
+    return evt.type === 'DOMNodeRemoved';
+  },"MutationEvent.initMutationEvent() exists");
 }
 
 </script>

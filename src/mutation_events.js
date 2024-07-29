@@ -21,6 +21,10 @@
     return;
   }
   window.mutationEventsPolyfillInstalled = true;
+  // If the feature is already natively supported, use it instead.
+  if ("MutationEvent" in window && !window.mutationEventsUsePolyfillAlways) {
+    return;
+  }
 
   const mutationEvents = new Set([
     'DOMCharacterDataModified',
@@ -182,6 +186,30 @@
       return;
     }
     originalRemoveEventListener.apply(this, arguments);
+  };
+
+  // This makes things like MutationEvent.MODIFICATION not throw.
+  window.MutationEvent = class extends CustomEvent {
+    constructor(type,dict) {
+      if (type !== "MagicString") {
+        throw("Illegal constructor");
+      }
+      super('',dict);
+    }
+    initMutationEvent(...args) {
+      this.initCustomEvent(...args);
+    }
+    static MODIFICATION = 1;
+    static ADDITION = 2;
+    static REMOVAL = 3;
+  }
+  window.initMutationEvent = () => new MutationEvent();
+  const originalCreateEvent = Document.prototype.createEvent;
+  Document.prototype.createEvent = function(type,...args) {
+    if (type === "MutationEvent") {
+      return new MutationEvent("MagicString");
+    }
+    return originalCreateEvent.call(this,type,...args);
   };
 
   console.log(`Mutation Events polyfill installed (native feature: ${("MutationEvent" in window) ? "supported" : "not present"}).`);
