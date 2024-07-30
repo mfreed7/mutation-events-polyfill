@@ -8,9 +8,15 @@ const testEventOrder = false; // Set to true to test the order of events
 
 <h3>Mutation Events Polyfill Test</h3>
 <ul>
-  <li><p><label>Test using the polyfill<input type=checkbox id=use_polyfill></label><span id="not_supported"></span></p>
+  <li><p><label>
+    <select id="polyfill_select">
+      <option id="option_use_polyfill">Test using the polyfill</option>
+      <option id="option_use_min_polyfill">Test using the minified polyfill</option>
+      <option id="option_use_native">Test the native feature</option>
+    </select>
   <li><p>Mutation Events are <u id="native_support"></u> in this browser. (In Chromium, see <code>chrome://flags/#mutation-events</code>.)</p>
   <li><p>This test will test the <u id="what_to_test"></u>.</p>
+  <li><p>To cleanly re-test different cases (removing all polyfill traces), reload the page.</p></li>
 </ul>
 <button id="go">Run the test</button>
 <div id=results class="hide">
@@ -62,29 +68,36 @@ const testEventOrder = false; // Set to true to test the order of events
 
 <script>
 const nativelySupported = "MutationEvent" in window;
-const usePolyfill = document.querySelector('#use_polyfill');
+const polyfillSelect = document.querySelector('#polyfill_select');
 const goButton = document.querySelector('#go');
 const whatToTest = document.querySelector('#what_to_test');
 if (!nativelySupported) {
-  usePolyfill.checked = true;
-  usePolyfill.disabled = true;
-  document.querySelector('#not_supported').textContent = '(Mandatory: Native feature not supported)';
+  const useNativeOption = document.querySelector('#option_use_native');
+  useNativeOption.textContent = 'Test the native feature (Unavailable)';
+  useNativeOption.disabled = true;
 }
 document.querySelector('#native_support').textContent = nativelySupported ? 'Supported' : 'NOT supported';
-usePolyfill.onchange = () => updateWhatToTest();
+polyfillSelect.onchange = () => updateWhatToTest();
 updateWhatToTest();
 function updateWhatToTest() {
-  whatToTest.textContent = usePolyfill.checked ? 'POLYFILL' : 'NATIVE IMPLEMENTATION';
+  if (document.querySelector('#option_use_native').selected) {
+    whatToTest.textContent = 'NATIVE IMPLEMENTATION';
+  } else if (document.querySelector('#option_use_polyfill').selected) {
+    whatToTest.textContent = 'POLYFILL';
+  } else if (document.querySelector('#option_use_min_polyfill').selected) {
+    whatToTest.textContent = 'POLYFILL (minified)';
+  }
 }
 goButton.onclick = async () => {
   goButton.disabled = true;
-  usePolyfill.disabled = true;
-  const loadPolyfill = usePolyfill.checked;
-  if (loadPolyfill) {
+  polyfillSelect.disabled = true;
+  const normalPolyfill = document.querySelector('#option_use_polyfill').selected;
+  const minPolyfill = document.querySelector('#option_use_min_polyfill').selected;
+  if (normalPolyfill || minPolyfill) {
     // This will tell the polyfill to load even if natively supported:
     window.mutationEventsUsePolyfillAlways = true;
     const polyfill = document.createElement('script');
-    polyfill.src = "../src/mutation_events.js";
+    polyfill.src = "../src/mutation_events." + (minPolyfill ? "min.js" : "js")
     const loaded = new Promise(resolve => polyfill.onload = resolve);
     document.body.appendChild(polyfill);
     await loaded;
@@ -260,7 +273,7 @@ async function testHarness() {
   });
 
   let left=2;
-  let state = usePolyfill.checked ? 'Polyfill ENABLED' : 'Native feature';
+  let state = document.querySelector('#option_use_native').selected ? 'Native feature' : 'Polyfill ENABLED';
   while (left) {
     // Run all of the tests:
     await runAllTests(state);
@@ -293,7 +306,7 @@ function eventObj(type, target, overrides) {
   newEvent.type = type;
   newEvent.target = target;
   // Expect trusted events if using the native feature.
-  newEvent.isTrusted = !usePolyfill.checked;
+  newEvent.isTrusted = document.querySelector('#option_use_native').selected;
   for(prop in overrides) {
     newEvent[prop] = overrides[prop];
   }
