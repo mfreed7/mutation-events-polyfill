@@ -11,7 +11,7 @@
   },
   "author": "Mason Freed <mfreed@mfreed.com>",
   "license": "BSD-3-Clause",
-  "main": "src/mutation_events_min.js",
+  "main": "src/mutation_events.min.js",
   "dependencies": {}
 }
 

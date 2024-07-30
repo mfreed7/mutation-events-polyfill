@@ -13,7 +13,7 @@ To use this polyfill, simply load it before any calls to `addEventListener`
 for Mutation Events:
 
   ```html
-  <script src="mutation_events.js"></script>
+  <script src="mutation_events.min.js"></script>
   <div id=target></div>
   <script>
   target.addEventListener('DOMNodeInserted',() => {});
