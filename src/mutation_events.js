@@ -171,21 +171,21 @@
   Element.prototype.addEventListener = function(eventName, listener, options) {
     if (mutationEvents.has(eventName)) {
       enableMutationEventPolyfill(this);
-      const {augmentedListener,fullEventName} = getAugmentedListener(...arguments);
+      const {augmentedListener,fullEventName} = getAugmentedListener(eventName, listener, options);
       originalAddEventListener.apply(this, [fullEventName, augmentedListener, options]);
       return;
     }
-    originalAddEventListener.apply(this, arguments);
+    originalAddEventListener.call(this, eventName, listener, options);
   };
   const originalRemoveEventListener = window.removeEventListener;
   Element.prototype.removeEventListener = function(eventName, listener, options) {
     if (mutationEvents.has(eventName)) {
       disableMutationEventPolyfill(this);
-      const {augmentedListener,fullEventName} = getAugmentedListener(...arguments);
+      const {augmentedListener,fullEventName} = getAugmentedListener(eventName, listener, options);
       originalRemoveEventListener.apply(this, [fullEventName, augmentedListener, options]);
       return;
     }
-    originalRemoveEventListener.apply(this, arguments);
+    originalRemoveEventListener.call(this, eventName, listener, options);
   };
 
   // This makes things like MutationEvent.MODIFICATION not throw.
