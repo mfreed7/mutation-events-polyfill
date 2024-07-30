@@ -24,7 +24,8 @@ for Mutation Events:
 The polyfill monkeypatches `addEventListener` and `removeEventListener`
 and attaches a Mutation Observer whenever addEventListener is called with
 a Mutation Event name. Mutation Observer is well supported by all evergreen
-browsers.
+browsers. The polyfill also adds an implementation of the `MutationEvent`
+class, and monkeypatches Document.createEvent so that it can be created.
 
 There is no standard for Mutation Events, and indeed there are some
 differences between rendering engines. Roughly, for a listener on `target`,
