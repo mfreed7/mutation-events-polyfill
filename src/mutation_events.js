@@ -22,7 +22,8 @@
   }
   window.mutationEventsPolyfillInstalled = true;
   // If the feature is already natively supported, use it instead.
-  if ("MutationEvent" in window && !window.mutationEventsUsePolyfillAlways) {
+  const nativeFeatureSupported = "MutationEvent" in window;
+  if (nativeFeatureSupported && !window.mutationEventsUsePolyfillAlways) {
     return;
   }
 
@@ -212,5 +213,5 @@
     return originalCreateEvent.call(this,type,...args);
   };
 
-  console.log(`Mutation Events polyfill installed (native feature: ${("MutationEvent" in window) ? "supported" : "not present"}).`);
+  console.log(`Mutation Events polyfill installed (native feature: ${nativeFeatureSupported ? "supported" : "not present"}).`);
 })();
