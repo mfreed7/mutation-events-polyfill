@@ -129,11 +129,11 @@
 
   const observerOptions = {subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true, characterDataOldValue: true};
   function enableMutationEventPolyfill(target) {
-    if (listeningNodes != null && listeningNodes.has != null && listeningNodes.has(target))
+    if (hasTarget(listeningNodes, target))
       return;
     listeningNodes.add(target);
     const rootElement = getRootElement(target);
-    if (documentsToObservers != null && documentsToObservers.has != null && documentsToObservers.has(rootElement)) {
+    if (hasTarget(documentsToObservers, rootElement)) {
       documentsToObservers.get(rootElement).count++;
       return;
     }
@@ -143,11 +143,11 @@
   }
 
   function disableMutationEventPolyfill(target) {
-    if (listeningNodes != null && listeningNodes.has != null && !listeningNodes.has(target))
+    if (hasTarget(listeningNodes, target))
       return;
     listeningNodes.delete(target);
     const rootElement = getRootElement(target);
-    if (documentsToObservers != null && documentsToObservers.has != null && !documentsToObservers.has(rootElement))
+    if (hasTarget(documentsToObservers, rootElement))
       return;
     if (--documentsToObservers.get(rootElement).count === 0) {
       const observer = documentsToObservers.get(rootElement).observer;
@@ -159,7 +159,7 @@
   // Monkeypatch addEventListener/removeEventListener
   const originalAddEventListener = Element.prototype.addEventListener;
   function getAugmentedListener(eventName, listener, options) {
-    if (mutationEvents != null && mutationEvents.has != null && mutationEvents.has(eventName)) {
+    if (hasTarget(mutationEvents, eventName)) {
       return {fullEventName: eventName + polyfillEventNameExtension,
         augmentedListener: (event) => {
         // Remove polyfillEventNameExtension:
@@ -170,7 +170,7 @@
     return {fullEventName: eventName,augmentedListener: listener};
   }
   Element.prototype.addEventListener = function(eventName, listener, options) {
-    if (mutationEvents != null && mutationEvents.has != null && mutationEvents.has(eventName)) {
+    if (hasTarget(mutationEvents, eventName)) {
       enableMutationEventPolyfill(this);
       const {augmentedListener,fullEventName} = getAugmentedListener(eventName, listener, options);
       originalAddEventListener.apply(this, [fullEventName, augmentedListener, options]);
@@ -180,7 +180,7 @@
   };
   const originalRemoveEventListener = window.removeEventListener;
   Element.prototype.removeEventListener = function(eventName, listener, options) {
-    if (mutationEvents != null && mutationEvents.has != null && mutationEvents.has(eventName)) {
+    if (hasTarget(mutationEvents, eventName)) {
       disableMutationEventPolyfill(this);
       const {augmentedListener,fullEventName} = getAugmentedListener(eventName, listener, options);
       originalRemoveEventListener.apply(this, [fullEventName, augmentedListener, options]);
@@ -214,4 +214,9 @@
   };
 
   console.log(`Mutation Events polyfill installed (native feature: ${nativeFeatureSupported ? "supported" : "not present"}).`);
+
+  // Helper function to avoid errors when has doesn't exist
+  function hasTarget(elem, target) {
+    return elem && elem.has && elem.has(target)
+  }
 })();
