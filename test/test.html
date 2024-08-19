@@ -135,7 +135,7 @@ const eventProperties = [
   'attrChange',
   'newValue',
   'prevValue',
-  /* Things we can't do with the polyfill: */
+  // The relatedNode field is not often set correctly by the polyfill:
   // 'relatedNode',
 ]
 function assert(val,msg) {
@@ -398,10 +398,10 @@ async function runAllTests(state) {
 
   await testOne(state,'Replace children',[
       eventObj('DOMNodeRemoved','Text node Hello',{relatedNode: target}),
-      eventObj('DOMNodeRemovedFromDocument','Text node Hello',{relatedNode: target, bubbles:false}),
+      eventObj('DOMNodeRemovedFromDocument','Text node Hello',{bubbles:false}),
       eventObj('DOMSubtreeModified','target'),
       eventObj('DOMNodeInserted','Text node Hello there',{relatedNode: target}),
-      eventObj('DOMNodeInsertedIntoDocument','Text node Hello there',{relatedNode: target, bubbles:false}),
+      eventObj('DOMNodeInsertedIntoDocument','Text node Hello there',{bubbles:false}),
       eventObj('DOMSubtreeModified','target'),
     ], [
       [0, 'parent', 'capture'],
@@ -444,7 +444,7 @@ async function runAllTests(state) {
 
   await testOne(state, 'Append child node',[
       eventObj('DOMNodeInserted','div', {relatedNode: target}),
-      eventObj('DOMNodeInsertedIntoDocument','div', {relatedNode: target, bubbles: false}),
+      eventObj('DOMNodeInsertedIntoDocument','div', {bubbles: false}),
       eventObj('DOMSubtreeModified','target'),
     ], [
       [0, 'parent', 'capture'],
