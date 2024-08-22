@@ -127,6 +127,11 @@
     return rootNode;
   }
 
+  // Helper function to avoid errors when has doesn't exist
+  function hasTarget(elem, target) {
+    return elem && elem.has && elem.has(target)
+  }
+
   const observerOptions = {subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true, characterDataOldValue: true};
   function enableMutationEventPolyfill(target) {
     if (hasTarget(listeningNodes, target))
@@ -143,11 +148,11 @@
   }
 
   function disableMutationEventPolyfill(target) {
-    if (hasTarget(listeningNodes, target))
+    if (!hasTarget(listeningNodes, target))
       return;
     listeningNodes.delete(target);
     const rootElement = getRootElement(target);
-    if (hasTarget(documentsToObservers, rootElement))
+    if (!hasTarget(documentsToObservers, rootElement))
       return;
     if (--documentsToObservers.get(rootElement).count === 0) {
       const observer = documentsToObservers.get(rootElement).observer;
@@ -215,8 +220,4 @@
 
   console.log(`Mutation Events polyfill installed (native feature: ${nativeFeatureSupported ? "supported" : "not present"}).`);
 
-  // Helper function to avoid errors when has doesn't exist
-  function hasTarget(elem, target) {
-    return elem && elem.has && elem.has(target)
-  }
 })();
