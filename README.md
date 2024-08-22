@@ -78,7 +78,7 @@ Safari and Firefox in a few ways:
      capture before bubble.
 
 
-## Synchronous events vs. microtask timing
+## Behavior differences
 
 There is one major differences between native Mutation Events and this polyfill
 which uses Mutation Observer. Since Mutation Events are synchronous, they are
@@ -94,6 +94,12 @@ from the former to the latter.
 Additionally, the order of events is not always the same between native
 Mutation Events and the events dispatched by this polyfill. But they're
 close.
+
+Finally, the `relatedNode` field of the dispatched events is often `null` when
+using the polyfill. Ordinarily, `relatedNode` points to e.g. the old parent
+element for `DOMNodeRemoved`, or the new parent element for `DOMNodeInserted`.
+While the polyfill attempts to set this field correctly, it misses in several
+cases. The tests do not currently check `relatedNode` for correctness.
 
 ## Tests
 
