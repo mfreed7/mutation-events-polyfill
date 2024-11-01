@@ -108,6 +108,12 @@ events fired on the node and a parent. The test will fall back to testing the
 native feature, if `MutationEvent` is supported. You can run tests directly
 from this repo, [here](https://mfreed7.github.io/mutation-events-polyfill/test/test.html).
 
+## Chrome extension
+
+For users, [this Chrome extension](https://chromewebstore.google.com/detail/mutation-events-polyfill/fnhgiplcfikoaaaakbflchmibaikghpj)
+automatically installs this polyfill on all pages, mitigating breakage on
+sites that use Mutation Events and do not utilize the polyfill themselves.
+
 ## Improvements / Bugs
 
 If you find issues with the polyfill, feel free to file them [here](https://github.com/mfreed7/mutation-events-polyfill/issues).
